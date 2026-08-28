@@ -2,37 +2,31 @@
 // (net.http_post, the estate's proven pattern). Finds parks that have come due,
 // sends Web Push to every subscribed device, and stamps notified_at. The in-app
 // arrival banner is the belt-and-braces surface; this is the knock.
-// Auth: a dispatch secret checked against an embedded hash (cron carries the
-// plain value; only service-role eyes can read cron.job). verify_jwt=false.
+// Auth: the dispatch secret lives ONLY in eddy_config (generated server-side by
+// gen_random_bytes; it never left the database). The cron reads it at runtime and
+// this function compares against the same row. verify_jwt=false.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
-
-const DISPATCH_HASH = "10278a991a001fb7b00ba7209771ec3934b3458473520b00e95a00bd9ccc1c8e";
-
-async function sha256hex(s: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 Deno.serve(async (req: Request) => {
   const headers = { "Content-Type": "application/json" };
   if (req.method !== "POST") return new Response(JSON.stringify({ error: "POST only" }), { status: 405, headers });
   let body: any;
   try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: "bad json" }), { status: 400, headers }); }
-  if (!body.secret || (await sha256hex(String(body.secret))) !== DISPATCH_HASH) {
-    return new Response(JSON.stringify({ error: "bad secret" }), { status: 403, headers });
-  }
 
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
     const [cfg, due, subs] = await Promise.all([
-      sb.from("eddy_config").select("key, value").in("key", ["vapid_public", "vapid_private"]),
+      sb.from("eddy_config").select("key, value").in("key", ["vapid_public", "vapid_private", "dispatch_secret"]),
       sb.from("eddy_parks").select("id, until, note").is("notified_at", null).lte("until", new Date().toISOString()).limit(20),
       sb.from("eddy_push_subs").select("id, endpoint, p256dh, auth"),
     ]);
     const config: Record<string, string> = {};
     for (const r of (cfg.data ?? []) as any[]) config[r.key] = r.value;
+    if (!config.dispatch_secret || String(body.secret ?? "") !== config.dispatch_secret) {
+      return new Response(JSON.stringify({ error: "bad secret" }), { status: 403, headers });
+    }
     if (!config.vapid_public || !config.vapid_private) {
       return new Response(JSON.stringify({ error: "vapid keys missing" }), { status: 500, headers });
     }
