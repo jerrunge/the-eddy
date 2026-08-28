@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0A1316">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The Eddy">
+<title>The Eddy</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app" aria-live="polite">
+  <!-- Landing -->
+  <section id="v-land" class="view">
+    <canvas id="eddy-canvas" aria-hidden="true"></canvas>
+    <div class="land-inner">
+      <div id="ctx-strip" class="ctx-strip"></div>
+      <h1 class="land-title">Caught in it?</h1>
+      <button id="btn-in" class="big-btn">I'm in it</button>
+      <div id="parks-banner" class="parks-banner hidden"></div>
+      <nav class="land-nav">
+        <button data-nav="record" class="quiet-btn">The record</button>
+        <button data-nav="ride" class="quiet-btn">Ride an urge</button>
+        <button data-nav="watch" class="quiet-btn">Watch</button>
+        <button data-nav="settings" class="quiet-btn">Settings</button>
+      </nav>
+    </div>
+  </section>
+
+  <!-- Episode -->
+  <section id="v-ep" class="view hidden">
+    <header class="bar">
+      <button class="back" data-back>&#8249;</button>
+      <span id="ep-clock" class="bar-label"></span>
+      <button id="btn-done" class="bar-action">Done</button>
+    </header>
+    <div id="ep-stream" class="stream"></div>
+    <div class="guide-moves">
+      <button data-move="land" class="move-btn">Land it</button>
+      <button data-move="two_stories" class="move-btn">Two stories</button>
+      <button data-move="park" class="move-btn warm">Park it</button>
+      <button data-move="next_move" class="move-btn">Next move</button>
+    </div>
+    <div class="dump-row">
+      <textarea id="dump" rows="2" placeholder="Dump it. Raw is fine." aria-label="Dump the loop"></textarea>
+      <button id="btn-talk" class="talk-btn" aria-label="Hold to talk">&#127908;</button>
+      <button id="btn-send" class="send-btn" aria-label="Send to the guide">&#8593;</button>
+    </div>
+  </section>
+
+  <!-- Park -->
+  <section id="v-park" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">Park it</span><span></span></header>
+    <div class="pad">
+      <p class="lead">Write it down, hand it over. If it still needs you at the appointment, it gets your full attention on purpose.</p>
+      <div id="park-chips" class="chips"></div>
+      <input type="datetime-local" id="park-custom" class="dt" aria-label="Pick a time">
+      <button id="btn-park-go" class="big-btn small">Park it</button>
+    </div>
+  </section>
+
+  <!-- Parked confirmation -->
+  <section id="v-held" class="view hidden">
+    <div class="held-inner">
+      <h1 class="held-title">Held.<br>Not lost.</h1>
+      <p id="held-line" class="lead"></p>
+      <p id="held-stats" class="held-stats"></p>
+      <button id="btn-held-done" class="big-btn small">Back to it</button>
+    </div>
+  </section>
+
+  <!-- Park arrival -->
+  <section id="v-arrive" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">The parked loop</span><span></span></header>
+    <div class="pad">
+      <p class="lead">You parked this:</p>
+      <div id="arrive-note" class="note-card"></div>
+      <p class="lead">How does it arrive?</p>
+      <div class="two-row">
+        <button id="btn-arrive-quiet" class="move-btn">Quiet now</button>
+        <button id="btn-arrive-loud" class="move-btn warm">Still loud</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Watch -->
+  <section id="v-watch" class="view hidden">
+    <canvas id="watch-canvas" aria-hidden="true"></canvas>
+    <div class="watch-inner">
+      <p id="watch-thought" class="watch-thought"></p>
+      <p class="watch-hint">Let it circle. You are on the bank, not in the water.</p>
+      <p id="watch-timer" class="watch-timer">1:30</p>
+      <button id="btn-watch-done" class="quiet-btn">Done watching</button>
+    </div>
+  </section>
+
+  <!-- Ride -->
+  <section id="v-ride" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">Ride the urge</span><span></span></header>
+    <div class="pad">
+      <p class="lead">Name the ritual pulling at you. Then ride the urge for ninety seconds instead of feeding it. Both outcomes land as plain facts.</p>
+      <div id="ritual-chips" class="chips"></div>
+      <input id="ritual-new" class="dt" placeholder="Add your own" aria-label="Add a ritual">
+      <div id="ride-ring" class="ride-ring hidden"><span id="ride-count">90</span></div>
+      <button id="btn-ride-start" class="big-btn small">The urge is here</button>
+      <div id="ride-outcome" class="two-row hidden">
+        <button id="btn-rode" class="move-btn">I rode it</button>
+        <button id="btn-took" class="move-btn warm">It took me</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Record -->
+  <section id="v-record" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">The record</span><span></span></header>
+    <div class="pad" id="record-body"><p class="lead">Reading the water...</p></div>
+  </section>
+
+  <!-- Settings -->
+  <section id="v-settings" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">Settings</span><span></span></header>
+    <div class="pad">
+      <div class="set-block"><b>Pairing</b><p id="set-pair" class="dim"></p></div>
+      <div class="set-block"><b>Appointment knocks</b><p class="dim">Parks knock on this phone when they come due.</p><button id="btn-push" class="move-btn">Turn on knocks</button><p id="push-state" class="dim"></p></div>
+      <div class="set-block"><b>The guide's law</b><p class="dim" id="law-line">The guide answers fresh every time. The verbatim-repeat law (A1) arms only on your word to homebase.</p></div>
+      <div class="set-block"><b>Your data</b><p class="dim">Everything lives in your own Supabase, visible only to you, never scored.</p><button id="btn-export" class="move-btn">Export everything</button></div>
+      <div class="set-block"><b>Sync</b><p id="sync-state" class="dim"></p></div>
+    </div>
+  </section>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
