@@ -398,7 +398,29 @@ async function loadRecord() {
 }
 
 /* ---------- settings ---------- */
-document.getElementById("set-pair") && (document.getElementById("set-pair").textContent = token() ? "Paired to your backend." : "Not paired. Open your pairing link once on this phone.");
+/* iOS lesson, learned the hard way: an installed home-screen app has its OWN
+   storage, separate from Safari. So pairing must be possible INSIDE the
+   installed app: paste the link or the bare token here, once. */
+function updatePairLine(msg) {
+  const el = document.getElementById("set-pair");
+  if (el) el.textContent = msg || (token() ? "Paired to your backend." : "Not paired. Paste your pairing link below, once.");
+}
+updatePairLine();
+document.getElementById("btn-pair").addEventListener("click", async () => {
+  const raw = document.getElementById("pair-input").value.trim();
+  if (!raw) return;
+  const t = raw.includes("#setup=") ? raw.split("#setup=")[1].split(/[\s&?]/)[0] : raw;
+  localStorage.setItem("eddy_token", t);
+  updatePairLine("Checking the pairing...");
+  try {
+    await api("context");
+    document.getElementById("pair-input").value = "";
+    updatePairLine("Paired and connected.");
+    loadContext(); flush();
+  } catch {
+    updatePairLine("That token was refused. Check the link and paste it whole.");
+  }
+});
 document.getElementById("btn-push").addEventListener("click", async () => {
   const state = document.getElementById("push-state");
   try {

@@ -128,7 +128,10 @@
   <section id="v-settings" class="view hidden">
     <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">Settings</span><span></span></header>
     <div class="pad">
-      <div class="set-block"><b>Pairing</b><p id="set-pair" class="dim"></p></div>
+      <div class="set-block"><b>Pairing</b><p id="set-pair" class="dim"></p>
+        <input id="pair-input" class="dt" placeholder="Paste your pairing link or token" aria-label="Pairing link or token">
+        <button id="btn-pair" class="move-btn">Pair this app</button>
+      </div>
       <div class="set-block"><b>Appointment knocks</b><p class="dim">Parks knock on this phone when they come due.</p><button id="btn-push" class="move-btn">Turn on knocks</button><p id="push-state" class="dim"></p></div>
       <div class="set-block"><b>The guide's law</b><p class="dim" id="law-line">The guide answers fresh every time. The verbatim-repeat law (A1) arms only on your word to homebase.</p></div>
       <div class="set-block"><b>Your data</b><p class="dim">Everything lives in your own Supabase, visible only to you, never scored.</p><button id="btn-export" class="move-btn">Export everything</button></div>
