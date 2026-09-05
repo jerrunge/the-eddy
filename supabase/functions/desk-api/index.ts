@@ -46,10 +46,12 @@ Deno.serve(async (req: Request) => {
       for (const o of (body.ops ?? []).slice(0, 100)) {
         try {
           if (o.kind === "item_add") {
-            await sb.from("desk_items").upsert({ id: o.id, box_id: o.box_id, text: String(o.text ?? "").slice(0, 500), detail: o.detail ?? null, due: o.due ?? null, position: o.position ?? 999, source: "him" });
+            await sb.from("desk_items").upsert({ id: o.id, box_id: o.box_id, parent_item_id: o.parent_item_id ?? null, kind: o.item_kind ?? "task", text: String(o.text ?? "").slice(0, 500), detail: o.detail ?? null, due: o.due ?? null, position: o.position ?? 999, source: "him" });
           } else if (o.kind === "item_set") {
             const patch: any = { updated_at: new Date().toISOString() };
-            for (const k of ["text", "detail", "due", "position", "box_id", "linear_ref"]) if (k in o) patch[k] = o[k];
+            for (const k of ["text", "detail", "due", "position", "box_id", "linear_ref", "parent_item_id", "choice", "options"]) if (k in o) patch[k] = o[k];
+            if ("item_kind" in o) patch.kind = o.item_kind;
+            if ("body" in o) { patch.body = o.body; patch.body_updated_at = new Date().toISOString(); }
             if ("done" in o) { patch.done = !!o.done; patch.done_at = o.done ? new Date().toISOString() : null; }
             await sb.from("desk_items").update(patch).eq("id", o.id);
           } else if (o.kind === "item_del") {
