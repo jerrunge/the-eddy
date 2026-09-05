@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#EDF1F1">
+<title>The Harbor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#EDF1F1; --card:#FBFBF8; --ink:#1E2B2E; --dim:#5E7275; --faint:#93A5A6; --line:#DCE3E2;
+    --harbor:#23666B; --ember:#C06A3B;
+    --h-clay:#B4664D; --h-amber:#C08A2E; --h-moss:#6E8B5A; --h-slate:#5A6B80; --h-harbor:#23666B;
+    --h-dusk:#7A6890; --h-gold:#B29045; --h-russet:#96543C; --h-teal:#3E8C84;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  body{margin:0; background:var(--ground); color:var(--ink); font-family:"Public Sans",system-ui,sans-serif; font-size:16px; line-height:1.5; padding-bottom:120px;}
+  header{padding:26px 18px 6px; max-width:720px; margin:0 auto;}
+  h1{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:2rem; margin:0;}
+  .sub{color:var(--dim); font-size:.92rem; margin:4px 0 0;}
+  .datestrip{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.66rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); margin-bottom:6px;}
+  .soon{max-width:720px; margin:14px auto 0; padding:0 18px; display:flex; gap:8px; overflow-x:auto; scrollbar-width:none;}
+  .soon::-webkit-scrollbar{display:none}
+  .soon-chip{flex:0 0 auto; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:7px 13px; font-size:.78rem; color:var(--dim); white-space:nowrap;}
+  .soon-chip b{color:var(--ink); font-weight:600;}
+  main{max-width:720px; margin:14px auto 0; padding:0 14px; display:flex; flex-direction:column; gap:14px;}
+  .box{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 16px 12px;}
+  .box-head{display:flex; align-items:baseline; gap:10px;}
+  .bollard{width:11px; height:11px; border-radius:50%; flex:0 0 auto; position:relative; top:1px;}
+  .box-title{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:1.22rem; margin:0; flex:1;}
+  .deadline{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.64rem; letter-spacing:.08em; color:var(--ember); white-space:nowrap;}
+  .why{color:var(--dim); font-size:.86rem; margin:6px 0 10px; line-height:1.45;}
+  .items{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
+  .item{display:flex; gap:11px; padding:9px 2px; border-top:1px solid var(--line); align-items:flex-start; cursor:pointer;}
+  .item:first-child{border-top:none}
+  .tick{width:22px; height:22px; border-radius:7px; border:2px solid var(--faint); flex:0 0 auto; margin-top:1px; display:flex; align-items:center; justify-content:center; color:transparent; font-weight:700; font-size:.9rem; transition:all .15s;}
+  .item.done .tick{background:var(--harbor); border-color:var(--harbor); color:#fff;}
+  .item-body{flex:1; min-width:0;}
+  .item-text{font-size:.95rem;}
+  .item.done .item-text{color:var(--faint); text-decoration:line-through;}
+  .item-detail{color:var(--dim); font-size:.8rem; margin-top:1px;}
+  .item.done .item-detail{color:var(--faint)}
+  .due{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.62rem; color:var(--ember); letter-spacing:.06em;}
+  .due.past{font-weight:700}
+  .landed{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.62rem; letter-spacing:.1em; color:var(--faint); text-transform:uppercase; margin-top:8px;}
+  .add-row{display:flex; gap:8px; margin-top:8px;}
+  .add-row input{flex:1; border:1px dashed var(--line); background:transparent; border-radius:10px; padding:8px 12px; font:inherit; font-size:.88rem; color:var(--ink);}
+  .add-row input::placeholder{color:var(--faint)}
+  .add-row button{border:none; background:var(--harbor); color:#fff; border-radius:10px; width:36px; font-size:1.1rem; cursor:pointer;}
+  /* edit sheet */
+  #sheet{position:fixed; inset:0; background:rgba(20,35,38,.45); display:none; align-items:flex-end; z-index:30;}
+  #sheet.open{display:flex}
+  .sheet-card{background:var(--card); width:100%; border-radius:18px 18px 0 0; padding:18px 18px calc(20px + env(safe-area-inset-bottom)); max-width:720px; margin:0 auto; display:flex; flex-direction:column; gap:10px;}
+  .sheet-card textarea, .sheet-card input{border:1px solid var(--line); border-radius:10px; padding:10px 12px; font:inherit; font-size:.95rem; background:#fff; color:var(--ink); width:100%;}
+  .sheet-row{display:flex; gap:8px;}
+  .sheet-row button{flex:1; padding:12px; border-radius:12px; border:1.5px solid var(--line); background:var(--card); font:inherit; font-weight:600; cursor:pointer; color:var(--ink);}
+  .sheet-row .save{background:var(--harbor); border-color:var(--harbor); color:#fff;}
+  .sheet-row .del{color:var(--h-clay); border-color:var(--h-clay);}
+  /* claude bar */
+  .bar{position:fixed; left:0; right:0; bottom:0; background:linear-gradient(to top, var(--ground) 75%, transparent); padding:14px 14px calc(14px + env(safe-area-inset-bottom)); z-index:20;}
+  .bar-inner{max-width:720px; margin:0 auto; display:flex; gap:8px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:8px; box-shadow:0 4px 24px rgba(30,43,46,.10);}
+  #say{flex:1; border:none; background:transparent; font:inherit; font-size:.95rem; padding:8px 10px; resize:none; max-height:30dvh; color:var(--ink);}
+  #say:focus{outline:none}
+  #send{border:none; background:var(--ember); color:#fff; border-radius:12px; width:46px; font-size:1.2rem; cursor:pointer; flex:0 0 auto;}
+  #toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(92px + env(safe-area-inset-bottom)); background:var(--ink); color:var(--ground); padding:10px 18px; border-radius:12px; font-size:.86rem; max-width:88%; display:none; z-index:40;}
+  .logblock{max-width:720px; margin:18px auto 0; padding:0 18px; color:var(--faint); font-size:.76rem;}
+  .logblock div{padding:2px 0}
+  .pairing{max-width:720px; margin:20px auto; padding:0 18px; display:flex; flex-direction:column; gap:8px;}
+  .pairing input{border:1px solid var(--line); border-radius:10px; padding:12px; font:inherit; width:100%;}
+  .pairing button{border:none; background:var(--harbor); color:#fff; border-radius:10px; padding:12px; font:inherit; font-weight:600;}
+  footer{max-width:720px; margin:26px auto 0; padding:0 18px; color:var(--faint); font-size:.72rem;}
+  footer a{color:var(--dim)}
+  @media(min-width:760px){ main{display:grid; grid-template-columns:1fr 1fr; align-items:start;} }
+</style>
+</head>
+<body>
+<header>
+  <div class="datestrip" id="datestrip"></div>
+  <h1>The Harbor</h1>
+  <p class="sub">Everything on your mind, moored. Nothing here judges you; it just holds.</p>
+</header>
+<div class="soon" id="soon"></div>
+<main id="board"></main>
+<div class="pairing hidden" id="pairing" style="display:none">
+  <p class="sub">Not paired on this device. Paste your pairing link or token once:</p>
+  <input id="pair-input" placeholder="Paste pairing link or token">
+  <button id="pair-btn">Pair</button>
+</div>
+<div class="logblock" id="log"></div>
+<footer>The Harbor holds this season. The Eddy holds the loops. Data lives in your own backend; Claude edits show in the log and your edit is always final.</footer>
+
+<div id="sheet"><div class="sheet-card">
+  <textarea id="e-text" rows="2" aria-label="Item text"></textarea>
+  <input id="e-detail" placeholder="Detail (optional)" aria-label="Detail">
+  <input id="e-due" type="date" aria-label="Due date">
+  <div class="sheet-row"><button class="del" id="e-del">Remove</button><button id="e-cancel">Cancel</button><button class="save" id="e-save">Save</button></div>
+</div></div>
+
+<div class="bar"><div class="bar-inner">
+  <textarea id="say" rows="1" placeholder="Tell it what changed, in your words..."></textarea>
+  <button id="send" aria-label="Send">&#8593;</button>
+</div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const FN = "https://dsjnvwhyevjzsmuawkcs.supabase.co/functions/v1";
+if (location.hash.startsWith("#setup=")) { try{localStorage.setItem("eddy_token", location.hash.slice(7));}catch(e){} history.replaceState(null,"",location.pathname); }
+function token(){ try{return localStorage.getItem("eddy_token")||"";}catch(e){return "";} }
+
+let board = {boxes:[], items:[], log:[]};
+let editing = null;
+const HUES = {clay:"--h-clay",amber:"--h-amber",moss:"--h-moss",slate:"--h-slate",harbor:"--h-harbor",dusk:"--h-dusk",gold:"--h-gold",russet:"--h-russet",teal:"--h-teal"};
+const fmt = d => new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
+const todayYmd = () => new Date().toLocaleDateString("en-CA");
+
+async function api(op, extra={}){
+  const r = await fetch(FN+"/desk-api",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:token(),op,...extra})});
+  if(!r.ok) throw new Error("api "+r.status);
+  return r.json();
+}
+async function refresh(){
+  try{
+    board = await api("board");
+    document.getElementById("pairing").style.display="none";
+    render();
+  }catch(e){
+    if(!token()) document.getElementById("pairing").style.display="flex";
+    else toast("Offline or unpaired. Your last view stands.");
+  }
+}
+function toast(t){ const el=document.getElementById("toast"); el.textContent=t; el.style.display="block"; clearTimeout(el._t); el._t=setTimeout(()=>el.style.display="none", 4200); }
+
+function render(){
+  document.getElementById("datestrip").textContent = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}).toUpperCase();
+  // soon strip: next dated open items
+  const soon = board.items.filter(i=>!i.done && i.due).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,6);
+  const boxById = Object.fromEntries(board.boxes.map(b=>[b.id,b]));
+  document.getElementById("soon").innerHTML = soon.map(i=>`<span class="soon-chip"><b>${fmt(i.due)}</b> ${esc(i.text)}</span>`).join("");
+  const main = document.getElementById("board"); main.innerHTML = "";
+  for(const b of board.boxes){
+    const items = board.items.filter(i=>i.box_id===b.id);
+    const open = items.filter(i=>!i.done), done = items.filter(i=>i.done);
+    const el = document.createElement("section"); el.className="box";
+    const hue = getComputedStyle(document.documentElement).getPropertyValue(HUES[b.hue]||"--h-harbor");
+    el.innerHTML = `<div class="box-head"><span class="bollard" style="background:${hue}"></span><h2 class="box-title">${esc(b.title)}</h2>${b.deadline?`<span class="deadline">by ${fmt(b.deadline)}</span>`:""}</div>
+      ${b.why?`<p class="why">${esc(b.why)}</p>`:""}<ul class="items"></ul>
+      <div class="add-row"><input placeholder="Add to ${esc(b.title)}..." aria-label="Add item"><button aria-label="Add">+</button></div>
+      ${done.length?`<div class="landed">${done.length} landed</div>`:""}`;
+    const ul = el.querySelector(".items");
+    for(const i of [...open, ...done]){
+      const li = document.createElement("li"); li.className = "item"+(i.done?" done":"");
+      const duePast = i.due && !i.done && i.due < todayYmd();
+      li.innerHTML = `<span class="tick">&#10003;</span><span class="item-body"><span class="item-text">${esc(i.text)}</span>${i.detail?`<div class="item-detail">${esc(i.detail)}</div>`:""}${i.due&&!i.done?`<div class="due${duePast?" past":""}">${duePast?"was due ":"due "}${fmt(i.due)}</div>`:""}</span>`;
+      li.querySelector(".tick").addEventListener("click", ev=>{ ev.stopPropagation(); toggle(i); });
+      li.querySelector(".item-body").addEventListener("click", ()=>openSheet(i));
+      ul.appendChild(li);
+    }
+    const addInput = el.querySelector(".add-row input");
+    el.querySelector(".add-row button").addEventListener("click", ()=>addItem(b, addInput));
+    addInput.addEventListener("keydown", ev=>{ if(ev.key==="Enter") addItem(b, addInput); });
+    main.appendChild(el);
+  }
+  document.getElementById("log").innerHTML = (board.log||[]).slice(0,6).map(l=>`<div>${new Date(l.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})} · ${l.actor==="claude"?"Claude":"You"}: ${esc(l.summary)}</div>`).join("");
+}
+function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+async function toggle(i){
+  i.done = !i.done; render();
+  try{ await api("sync",{ops:[{kind:"item_set", id:i.id, done:i.done}]}); }catch(e){ toast("Could not save. It will keep trying."); }
+}
+async function addItem(b, input){
+  const t = input.value.trim(); if(!t) return;
+  const it = {id:crypto.randomUUID(), box_id:b.id, text:t, detail:null, done:false, due:null, position:400};
+  board.items.push(it); input.value=""; render();
+  try{ await api("sync",{ops:[{kind:"item_add", ...it}]}); }catch(e){ toast("Could not save. It will keep trying."); }
+}
+function openSheet(i){
+  editing = i;
+  document.getElementById("e-text").value = i.text;
+  document.getElementById("e-detail").value = i.detail||"";
+  document.getElementById("e-due").value = i.due||"";
+  document.getElementById("sheet").classList.add("open");
+}
+document.getElementById("e-cancel").addEventListener("click", ()=>document.getElementById("sheet").classList.remove("open"));
+document.getElementById("sheet").addEventListener("click", ev=>{ if(ev.target.id==="sheet") document.getElementById("sheet").classList.remove("open"); });
+document.getElementById("e-save").addEventListener("click", async ()=>{
+  if(!editing) return;
+  editing.text = document.getElementById("e-text").value.trim()||editing.text;
+  editing.detail = document.getElementById("e-detail").value.trim()||null;
+  editing.due = document.getElementById("e-due").value||null;
+  document.getElementById("sheet").classList.remove("open"); render();
+  try{ await api("sync",{ops:[{kind:"item_set", id:editing.id, text:editing.text, detail:editing.detail, due:editing.due}]}); }catch(e){ toast("Could not save."); }
+});
+document.getElementById("e-del").addEventListener("click", async ()=>{
+  if(!editing) return;
+  if(!confirm("Remove this item?")) return;
+  board.items = board.items.filter(x=>x.id!==editing.id);
+  document.getElementById("sheet").classList.remove("open"); render();
+  try{ await api("sync",{ops:[{kind:"item_del", id:editing.id}]}); }catch(e){ toast("Could not save."); }
+});
+
+const say = document.getElementById("say");
+say.addEventListener("input", ()=>{ say.style.height="auto"; say.style.height=Math.min(say.scrollHeight, innerHeight*0.3)+"px"; });
+document.getElementById("send").addEventListener("click", tellClaude);
+async function tellClaude(){
+  const t = say.value.trim(); if(!t) return;
+  say.value=""; say.style.height="auto";
+  toast("Working on it...");
+  try{
+    const r = await fetch(FN+"/desk-guide",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:token(), text:t})});
+    const j = await r.json();
+    toast(j.summary || j.error || "Done.");
+    await refresh();
+  }catch(e){ toast("The wire is down. Your boxes still work by hand."); }
+}
+document.getElementById("pair-btn").addEventListener("click", async ()=>{
+  const raw = document.getElementById("pair-input").value.trim(); if(!raw) return;
+  const t = raw.includes("#setup=") ? raw.split("#setup=")[1].split(/[\s&?]/)[0] : raw;
+  try{localStorage.setItem("eddy_token", t);}catch(e){}
+  await refresh();
+});
+refresh();
+</script>
+</body>
+</html>
