@@ -26,11 +26,21 @@
   .soon-chip{flex:0 0 auto; background:var(--card); border:1px solid var(--line); border-radius:20px; padding:7px 13px; font-size:.78rem; color:var(--dim); white-space:nowrap;}
   .soon-chip b{color:var(--ink); font-weight:600;}
   main{max-width:720px; margin:14px auto 0; padding:0 14px; display:flex; flex-direction:column; gap:14px;}
+  .topbar{max-width:720px; margin:10px auto 0; padding:0 18px; display:flex; justify-content:flex-end;}
+  .topbar button{background:none; border:none; color:var(--dim); font:inherit; font-size:.8rem; cursor:pointer; padding:4px;}
   .box{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px 16px 12px;}
-  .box-head{display:flex; align-items:baseline; gap:10px;}
+  .box.collapsed{padding-bottom:16px;}
+  .box-head{display:flex; align-items:baseline; gap:10px; cursor:pointer;}
   .bollard{width:11px; height:11px; border-radius:50%; flex:0 0 auto; position:relative; top:1px;}
   .box-title{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:1.22rem; margin:0; flex:1;}
   .deadline{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.64rem; letter-spacing:.08em; color:var(--ember); white-space:nowrap;}
+  .box-caret{color:var(--faint); font-size:.8rem; margin-left:2px;}
+  .box-summary{color:var(--dim); font-size:.82rem; margin:7px 0 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center;}
+  .box-summary .decide-flag{color:var(--decide); font-weight:600;}
+  .box-summary .over{color:var(--ember); font-weight:600;}
+  .box-summary .dot{color:var(--faint);}
+  .box.collapsed .why, .box.collapsed .items, .box.collapsed .add-row, .box.collapsed .landed{display:none;}
+  .box:not(.collapsed) .box-summary{display:none;}
   .why{color:var(--dim); font-size:.86rem; margin:6px 0 10px; line-height:1.45;}
   .items{list-style:none; margin:0; padding:0; display:flex; flex-direction:column;}
   .item{border-top:1px solid var(--line);}
@@ -111,6 +121,7 @@
   <p class="sub">Everything on your mind, moored. Tap a heavy one to break it down, decide it, or write it out.</p>
 </header>
 <div class="soon" id="soon"></div>
+<div class="topbar" id="topbar" style="display:none"><button id="toggle-all">Expand all</button></div>
 <main id="board"></main>
 <div class="pairing" id="pairing" style="display:none">
   <p class="sub">Not paired on this device. Paste your pairing link or token once:</p>
@@ -131,11 +142,22 @@
 <script>
 "use strict";
 const FN = "https://dsjnvwhyevjzsmuawkcs.supabase.co/functions/v1";
-if (location.hash.startsWith("#setup=")) { try{localStorage.setItem("eddy_token", location.hash.slice(7));}catch(e){} history.replaceState(null,"",location.pathname); }
-function token(){ try{return localStorage.getItem("eddy_token")||"";}catch(e){return "";} }
+// Token handling that survives Safari's iframe storage block: hold it in memory
+// for the session, and try localStorage as a bonus. The Webflow frame passes the
+// token in the URL every load, so a blocked localStorage never forces a re-paste.
+let TOKEN = "";
+try { TOKEN = localStorage.getItem("eddy_token") || ""; } catch(e) {}
+(function(){
+  const m = (location.hash + location.search).match(/setup=([^&\s]+)/);
+  if (m) { TOKEN = decodeURIComponent(m[1]); try{ localStorage.setItem("eddy_token", TOKEN); }catch(e){} history.replaceState(null,"",location.pathname); }
+})();
+function token(){ return TOKEN; }
+function setToken(t){ TOKEN = t; try{ localStorage.setItem("eddy_token", t); }catch(e){} }
 
 let board = {boxes:[], items:[], log:[]};
 let openBoxes = {};
+let expandedBoxes = {};   // box.id -> true when opened; default collapsed
+let allExpanded = false;
 const HUES = {clay:"--h-clay",amber:"--h-amber",moss:"--h-moss",slate:"--h-slate",harbor:"--h-harbor",dusk:"--h-dusk",gold:"--h-gold",russet:"--h-russet",teal:"--h-teal"};
 const fmt = d => new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
 const todayYmd = () => new Date().toLocaleDateString("en-CA");
@@ -164,20 +186,36 @@ function render(){
   document.getElementById("datestrip").textContent = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}).toUpperCase();
   const soon = board.items.filter(i=>!i.done && i.due && !i.parent_item_id).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,6);
   document.getElementById("soon").innerHTML = soon.map(i=>`<span class="soon-chip"><b>${fmt(i.due)}</b> ${esc(i.text)}</span>`).join("");
+  document.getElementById("topbar").style.display = board.boxes.length ? "flex" : "none";
   const main = document.getElementById("board"); main.innerHTML = "";
   for(const b of board.boxes){
     const tops = board.items.filter(i=>i.box_id===b.id && !i.parent_item_id);
     const open = tops.filter(i=>!i.done), done = tops.filter(i=>i.done);
-    const el = document.createElement("section"); el.className="box";
+    const isOpen = !!expandedBoxes[b.id];
+    const el = document.createElement("section"); el.className="box"+(isOpen?"":" collapsed");
     const hue = getComputedStyle(document.documentElement).getPropertyValue(HUES[b.hue]||"--h-harbor");
-    el.innerHTML = `<div class="box-head"><span class="bollard" style="background:${hue}"></span><h2 class="box-title">${esc(b.title)}</h2>${b.deadline?`<span class="deadline">by ${fmt(b.deadline)}</span>`:""}</div>
+    // scan summary for the collapsed view
+    const decisions = open.filter(i=>i.kind==="decision").length;
+    const withSteps = open.filter(i=>kids(i.id).length && kids(i.id).some(s=>!s.done)).length;
+    const overdue = open.filter(i=>i.due && i.due < todayYmd()).length;
+    const nextDue = open.filter(i=>i.due).sort((a,b)=>a.due.localeCompare(b.due))[0];
+    const parts = [];
+    parts.push(`${open.length} open`);
+    if(overdue) parts.push(`<span class="over">${overdue} overdue</span>`);
+    else if(nextDue) parts.push(`next ${fmt(nextDue.due)}`);
+    if(decisions) parts.push(`<span class="decide-flag">${decisions} to decide</span>`);
+    if(withSteps) parts.push(`${withSteps} to break down`);
+    const summary = parts.join(`<span class="dot">·</span>`);
+    el.innerHTML = `<div class="box-head"><span class="bollard" style="background:${hue}"></span><h2 class="box-title">${esc(b.title)}</h2>${b.deadline?`<span class="deadline">by ${fmt(b.deadline)}</span>`:""}<span class="box-caret">${isOpen?"▾":"▸"}</span></div>
+      <div class="box-summary">${summary}</div>
       ${b.why?`<p class="why">${esc(b.why)}</p>`:""}<ul class="items"></ul>
       <div class="add-row"><input placeholder="Add to ${esc(b.title)}..." aria-label="Add item"><button aria-label="Add">+</button></div>
       ${done.length?`<div class="landed">${done.length} landed</div>`:""}`;
+    el.querySelector(".box-head").addEventListener("click", ()=>{ expandedBoxes[b.id]=!expandedBoxes[b.id]; render(); });
     const ul = el.querySelector(".items");
     for(const i of [...open, ...done]) ul.appendChild(renderItem(i));
     const addInput = el.querySelector(".add-row input");
-    el.querySelector(".add-row button").addEventListener("click", ()=>addItem(b, addInput));
+    el.querySelector(".add-row button").addEventListener("click", ev=>{ ev.stopPropagation(); addItem(b, addInput); });
     addInput.addEventListener("keydown", ev=>{ if(ev.key==="Enter") addItem(b, addInput); });
     main.appendChild(el);
   }
@@ -340,9 +378,15 @@ async function tellClaude(){
 }
 document.getElementById("pair-btn").addEventListener("click", async ()=>{
   const raw = document.getElementById("pair-input").value.trim(); if(!raw) return;
-  const t = raw.includes("#setup=") ? raw.split("#setup=")[1].split(/[\s&?]/)[0] : raw;
-  try{localStorage.setItem("eddy_token", t);}catch(e){}
+  const t = raw.includes("setup=") ? raw.split("setup=")[1].split(/[\s&?]/)[0] : raw;
+  setToken(decodeURIComponent(t));
   await refresh();
+});
+document.getElementById("toggle-all").addEventListener("click", ()=>{
+  allExpanded = !allExpanded;
+  for(const b of board.boxes) expandedBoxes[b.id] = allExpanded;
+  document.getElementById("toggle-all").textContent = allExpanded ? "Collapse all" : "Expand all";
+  render();
 });
 refresh();
 </script>
