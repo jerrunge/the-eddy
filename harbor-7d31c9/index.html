@@ -163,6 +163,7 @@
         <label class="cap-btn warm">Snap a doc<input type="file" accept="image/*" capture="environment" id="cap-camera" hidden></label>
         <label class="cap-btn">Choose or scan<input type="file" accept="image/*,application/pdf" multiple id="cap-choose" hidden></label>
       </div>
+      <input id="paper-q" class="dt" placeholder="Search inside your documents..." aria-label="Search papers" style="margin-bottom:8px">
       <div class="cat-chips" id="cat-filter"></div>
       <div class="paper-grid" id="paper-grid"></div>
       <div class="empty" id="papers-empty" style="display:none">Nothing filed yet. Snap the first one.</div>
@@ -443,10 +444,29 @@ async function papersApi(op, extra={}){
   if(!r.ok) throw new Error("papers "+r.status);
   return r.json();
 }
+let paperQ = "", ocrBusy = false;
 async function loadPapers(){
-  try{ const r = await papersApi("list"); papers = r.papers||[]; paperCounts = r.counts||{}; }catch(e){ papers=[]; }
+  try{ const r = await papersApi("list", paperQ ? {q: paperQ} : {}); papers = r.papers||[]; paperCounts = r.counts||{}; if(!paperQ && r.pending) sweepPending(); }catch(e){ papers=[]; }
   renderPapers(); render();
 }
+/* reading: Claude transcribes each new doc so search works inside it */
+async function runOcr(id){
+  try{ const r = await papersApi("ocr",{id}); if(r.gist) toast("Read: "+r.gist); }catch(e){}
+}
+async function sweepPending(){
+  if(ocrBusy) return; ocrBusy = true;
+  try{
+    const r = await papersApi("ocr_pending");
+    for(const id of (r.ids||[]).slice(0,3)){ await runOcr(id); }
+    if((r.ids||[]).length){ const l = await papersApi("list", paperQ?{q:paperQ}:{}); papers=l.papers||[]; paperCounts=l.counts||{}; renderPapers(); render(); }
+  }catch(e){}
+  ocrBusy = false;
+}
+let qTimer=null;
+document.getElementById("paper-q").addEventListener("input", ev=>{
+  clearTimeout(qTimer);
+  qTimer = setTimeout(async ()=>{ paperQ = ev.target.value.trim(); paperFilter=""; paperBoxFilter=null; await loadPapers(); }, 380);
+});
 function renderPapers(){
   const total = papers.length;
   document.getElementById("papers-count").textContent = total ? `${total} filed` : "";
@@ -457,7 +477,7 @@ function renderPapers(){
   chips.querySelectorAll(".cat-chip").forEach(c=>c.addEventListener("click", ()=>{ paperFilter=c.dataset.cat; paperBoxFilter=null; renderPapers(); }));
   const list = papers.filter(p => (!paperFilter || p.category===paperFilter) && (!paperBoxFilter || p.box_id===paperBoxFilter));
   const grid = document.getElementById("paper-grid");
-  grid.innerHTML = list.map(p=>`<div class="paper" data-id="${p.id}">${p.thumb_url?`<img src="${p.thumb_url}" alt="">`:`<div class="pdf">${(p.mime||"").includes("pdf")?"PDF":"DOC"}</div>`}<div class="lab"><b>${esc(p.title||CAT_LABEL[p.category]||"Doc")}</b>${p.doc_date?fmt(p.doc_date):""}</div></div>`).join("");
+  grid.innerHTML = list.map(p=>`<div class="paper" data-id="${p.id}">${p.thumb_url?`<img src="${p.thumb_url}" alt="">`:`<div class="pdf">${(p.mime||"").includes("pdf")?"PDF":"DOC"}</div>`}<div class="lab"><b>${esc(p.title||p.summary||CAT_LABEL[p.category]||"Doc")}</b>${p.ocr_at?(p.doc_date?fmt(p.doc_date):""):"reading..."}</div></div>`).join("");
   grid.querySelectorAll(".paper").forEach(el=>el.addEventListener("click", ()=>openPaper(papers.find(p=>p.id===el.dataset.id))));
   document.getElementById("papers-empty").style.display = list.length ? "none" : "block";
 }
@@ -533,6 +553,7 @@ async function uploadFiles(files, sel){
       await putSigned(prep.main.url, mainBlob, mime);
       if(isImg && prep.thumb){ const th = await shrink(file, 360, 0.7); await putSigned(prep.thumb.url, th, "image/jpeg"); }
       await papersApi("record",{id, category:sel.cat, title: title ? (files.length>1?`${title} (${n+1})`:title) : null, note: note||null, doc_date:date, storage_path:prep.main.path, thumb_path: isImg&&prep.thumb?prep.thumb.path:null, mime, size_bytes: mainBlob.size, box_id: sel.box});
+      runOcr(id).then(loadPapers);
       n++; bar.style.width = Math.round(n/files.length*100)+"%";
     }catch(e){ toast("One did not file: "+String(e).slice(0,60)); }
   }
@@ -543,14 +564,16 @@ async function uploadFiles(files, sel){
 /* view and edit a filed paper */
 async function openPaper(p){
   if(!p) return;
-  card.innerHTML = `<div class="sheet-title">${esc(p.title||CAT_LABEL[p.category]||"Document")}</div>
+  card.innerHTML = `<div class="sheet-title">${esc(p.title||p.summary||CAT_LABEL[p.category]||"Document")}</div>
+    ${p.summary?`<div class="why" style="margin:0">${esc(p.summary)}</div>`:""}
     <div id="p-view" style="text-align:center"><span class="spin"></span></div>
     <div class="field-label">Filed under</div><div class="cat-chips" id="p-cats"></div>
     <div class="field-label">Box</div><div class="cat-chips" id="p-boxes"></div>
     <input id="p-title" placeholder="Title" value="${esc(p.title||"")}">
     <input id="p-date" type="date" value="${p.doc_date||""}">
     <input id="p-note" placeholder="Note" value="${esc(p.note||"")}">
-    <div class="toolbtns"><button class="toolbtn h" id="p-open">Open full size</button></div>
+    <details id="p-text-wrap"><summary class="field-label" style="cursor:pointer;margin:0">Extracted text</summary><pre id="p-text" class="reasoning" style="font-family:inherit;font-size:.82rem;max-height:30dvh;overflow:auto;margin-top:6px">${p.ocr_at?"Loading...":"Not read yet."}</pre></details>
+    <div class="toolbtns"><button class="toolbtn h" id="p-open">Open full size</button><button class="toolbtn n" id="p-reread">${p.ocr_at?"Read it again":"Read it now"}</button></div>
     <div class="sheet-row"><button class="del" id="p-del">Del</button><button id="p-cancel">Close</button><button class="save" id="p-save">Save</button></div>`;
   sheet.classList.add("open");
   let sel = {cat:p.category, box:p.box_id};
@@ -563,6 +586,12 @@ async function openPaper(p){
     document.getElementById("p-view").innerHTML = (v.mime||"").startsWith("image/") ? `<img class="preview" src="${v.url}" alt="">` : `<div class="pdf" style="padding:16px;color:var(--dim)">PDF · ${Math.round((p.size_bytes||0)/1024)} KB</div>`;
   }catch(e){ document.getElementById("p-view").innerHTML=`<div class="empty">Could not load the file right now.</div>`; }
   document.getElementById("p-open").addEventListener("click", ()=>{ if(viewUrl) window.open(viewUrl,"_blank"); });
+  if(p.ocr_at){ try{ const g = await papersApi("get",{id:p.id}); document.getElementById("p-text").textContent = g.paper?.ocr_text || "(no readable text)"; }catch(e){ document.getElementById("p-text").textContent="Could not load the text."; } }
+  document.getElementById("p-reread").addEventListener("click", async ()=>{
+    const b = document.getElementById("p-reread"); b.innerHTML=`<span class="spin"></span>Reading`; b.disabled=true;
+    await runOcr(p.id); await loadPapers();
+    const fresh = papers.find(x=>x.id===p.id); if(fresh) openPaper(fresh); else closeSheet();
+  });
   document.getElementById("p-cancel").addEventListener("click", closeSheet);
   document.getElementById("p-save").addEventListener("click", async ()=>{
     const patch = {id:p.id, category:sel.cat, box_id:sel.box, title:document.getElementById("p-title").value.trim()||null, doc_date:document.getElementById("p-date").value||null, note:document.getElementById("p-note").value.trim()||null};

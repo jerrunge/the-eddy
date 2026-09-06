@@ -2,3 +2,4 @@
 .eddy-hashes
 .vapid.json
 node_modules
+.papers-mirror.log
