@@ -111,7 +111,33 @@
   .spin{display:inline-block; width:13px; height:13px; border:2px solid var(--faint); border-top-color:var(--decide); border-radius:50%; animation:sp .7s linear infinite; vertical-align:-2px; margin-right:6px;}
   @keyframes sp{to{transform:rotate(360deg)}}
   @media(prefers-reduced-motion:reduce){.spin{animation:none}}
-  @media(min-width:760px){ main{display:grid; grid-template-columns:1fr 1fr; align-items:start;} }
+  /* papers drawer */
+  .papers{max-width:720px; margin:18px auto 0; padding:0 14px;}
+  .papers .box{padding-bottom:14px}
+  .papers-head{display:flex; align-items:baseline; gap:10px; cursor:pointer;}
+  .papers-head h2{font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:1.22rem; margin:0; flex:1;}
+  .papers-count{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.64rem; letter-spacing:.08em; color:var(--faint);}
+  .papers-body{display:none; margin-top:10px;}
+  .papers.open .papers-body{display:block}
+  .cap-row{display:flex; gap:8px; margin-bottom:10px;}
+  .cap-btn{flex:1; border:1.5px solid var(--harbor); color:var(--harbor); background:rgba(35,102,107,.05); border-radius:12px; padding:12px 8px; font:inherit; font-weight:600; font-size:.9rem; cursor:pointer; text-align:center;}
+  .cap-btn.warm{border-color:var(--ember); color:var(--ember); background:rgba(192,106,59,.05);}
+  .cat-chips{display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:4px; margin-bottom:8px;}
+  .cat-chips::-webkit-scrollbar{display:none}
+  .cat-chip{flex:0 0 auto; border:1.5px solid var(--line); background:var(--card); border-radius:16px; padding:6px 12px; font-size:.78rem; color:var(--dim); cursor:pointer; white-space:nowrap;}
+  .cat-chip.sel{border-color:var(--harbor); color:var(--harbor); font-weight:600;}
+  .paper-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .paper{background:var(--card-2); border:1px solid var(--line); border-radius:10px; overflow:hidden; cursor:pointer; aspect-ratio:3/4; position:relative;}
+  .paper img{width:100%; height:100%; object-fit:cover; display:block;}
+  .paper .pdf{width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.7rem; letter-spacing:.12em; color:var(--dim);}
+  .paper .lab{position:absolute; left:0; right:0; bottom:0; background:linear-gradient(transparent, rgba(30,43,46,.82)); color:#fff; font-size:.66rem; padding:14px 7px 6px; line-height:1.25;}
+  .paper .lab b{display:block; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .empty{color:var(--faint); font-size:.86rem; padding:8px 2px;}
+  .box-papers{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.62rem; letter-spacing:.08em; color:var(--harbor); margin-top:8px; cursor:pointer;}
+  .prog-bar{height:4px; background:var(--line); border-radius:2px; overflow:hidden; margin-top:6px;}
+  .prog-bar i{display:block; height:100%; background:var(--harbor); width:0; transition:width .2s;}
+  .preview{width:100%; max-height:38dvh; object-fit:contain; border-radius:10px; background:var(--card-2);}
+  @media(min-width:760px){ main{display:grid; grid-template-columns:1fr 1fr; align-items:start;} .paper-grid{grid-template-columns:repeat(5,1fr);} }
 </style>
 </head>
 <body>
@@ -128,8 +154,23 @@
   <input id="pair-input" placeholder="Paste pairing link or token">
   <button id="pair-btn">Pair</button>
 </div>
+<section class="papers" id="papers">
+  <div class="box">
+    <div class="papers-head" id="papers-head"><span class="bollard" style="background:var(--harbor)"></span><h2>Papers</h2><span class="papers-count" id="papers-count"></span><span class="box-caret" id="papers-caret">▸</span></div>
+    <div class="papers-body">
+      <p class="why" style="margin-top:0">Mail and documents, photographed and filed. They live in your own storage, for good, and 29:11 reads the same shelf.</p>
+      <div class="cap-row">
+        <label class="cap-btn warm">Snap a doc<input type="file" accept="image/*" capture="environment" id="cap-camera" hidden></label>
+        <label class="cap-btn">Choose or scan<input type="file" accept="image/*,application/pdf" multiple id="cap-choose" hidden></label>
+      </div>
+      <div class="cat-chips" id="cat-filter"></div>
+      <div class="paper-grid" id="paper-grid"></div>
+      <div class="empty" id="papers-empty" style="display:none">Nothing filed yet. Snap the first one.</div>
+    </div>
+  </div>
+</section>
 <div class="logblock" id="log"></div>
-<footer>Notes and decisions live in your own database, shared with the Eddy and with Claude. Every Claude change shows in the log; your edit is always final.</footer>
+<footer>Notes, decisions, and papers live in your own database, shared with the Eddy and with Claude. Every Claude change shows in the log; your edit is always final.</footer>
 
 <div id="sheet"><div class="sheet-card" id="sheet-card"></div></div>
 
@@ -210,8 +251,10 @@ function render(){
       <div class="box-summary">${summary}</div>
       ${b.why?`<p class="why">${esc(b.why)}</p>`:""}<ul class="items"></ul>
       <div class="add-row"><input placeholder="Add to ${esc(b.title)}..." aria-label="Add item"><button aria-label="Add">+</button></div>
+      <div class="box-papers">${(paperCounts["box:"+b.id]||0)?`${paperCounts["box:"+b.id]} paper${paperCounts["box:"+b.id]>1?"s":""} filed · `:""}file a doc here</div>
       ${done.length?`<div class="landed">${done.length} landed</div>`:""}`;
     el.querySelector(".box-head").addEventListener("click", ()=>{ expandedBoxes[b.id]=!expandedBoxes[b.id]; render(); });
+    el.querySelector(".box-papers").addEventListener("click", ()=>openPapersForBox(b));
     const ul = el.querySelector(".items");
     for(const i of [...open, ...done]) ul.appendChild(renderItem(i));
     const addInput = el.querySelector(".add-row input");
@@ -388,7 +431,154 @@ document.getElementById("toggle-all").addEventListener("click", ()=>{
   document.getElementById("toggle-all").textContent = allExpanded ? "Collapse all" : "Expand all";
   render();
 });
-refresh();
+
+/* ---- papers: mail and documents, photographed and filed ---- */
+const CATS = [["house","House"],["money","Money & Tax"],["legal","Legal"],["maddy","Maddy"],["health","Health"],["work","Work"],["cooper","Cooper"],["personal","Personal"]];
+const CAT_LABEL = Object.fromEntries(CATS);
+const BOX_CAT = {"The House":"house","The Things":"house","The Landing":"house","The Money":"money","The Work":"work","David":"personal","Maddy's Home":"maddy","Cooper":"cooper","The People":"personal"};
+let papers = [], paperCounts = {}, paperFilter = "", paperBoxFilter = null, defaultBox = null;
+
+async function papersApi(op, extra={}){
+  const r = await fetch(FN+"/papers-api",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({token:token(),op,...extra})});
+  if(!r.ok) throw new Error("papers "+r.status);
+  return r.json();
+}
+async function loadPapers(){
+  try{ const r = await papersApi("list"); papers = r.papers||[]; paperCounts = r.counts||{}; }catch(e){ papers=[]; }
+  renderPapers(); render();
+}
+function renderPapers(){
+  const total = papers.length;
+  document.getElementById("papers-count").textContent = total ? `${total} filed` : "";
+  const chips = document.getElementById("cat-filter");
+  chips.innerHTML = `<span class="cat-chip${!paperFilter&&!paperBoxFilter?" sel":""}" data-cat="">All</span>` +
+    CATS.map(([k,l])=>paperCounts[k]?`<span class="cat-chip${paperFilter===k?" sel":""}" data-cat="${k}">${l} · ${paperCounts[k]}</span>`:"").join("") +
+    (paperBoxFilter?`<span class="cat-chip sel" data-cat="">${esc(board.boxes.find(b=>b.id===paperBoxFilter)?.title||"box")} ✕</span>`:"");
+  chips.querySelectorAll(".cat-chip").forEach(c=>c.addEventListener("click", ()=>{ paperFilter=c.dataset.cat; paperBoxFilter=null; renderPapers(); }));
+  const list = papers.filter(p => (!paperFilter || p.category===paperFilter) && (!paperBoxFilter || p.box_id===paperBoxFilter));
+  const grid = document.getElementById("paper-grid");
+  grid.innerHTML = list.map(p=>`<div class="paper" data-id="${p.id}">${p.thumb_url?`<img src="${p.thumb_url}" alt="">`:`<div class="pdf">${(p.mime||"").includes("pdf")?"PDF":"DOC"}</div>`}<div class="lab"><b>${esc(p.title||CAT_LABEL[p.category]||"Doc")}</b>${p.doc_date?fmt(p.doc_date):""}</div></div>`).join("");
+  grid.querySelectorAll(".paper").forEach(el=>el.addEventListener("click", ()=>openPaper(papers.find(p=>p.id===el.dataset.id))));
+  document.getElementById("papers-empty").style.display = list.length ? "none" : "block";
+}
+document.getElementById("papers-head").addEventListener("click", ()=>{
+  const s = document.getElementById("papers"); s.classList.toggle("open");
+  document.getElementById("papers-caret").textContent = s.classList.contains("open") ? "▾" : "▸";
+});
+function openPapersForBox(b){
+  defaultBox = b; paperBoxFilter = b.id; paperFilter = "";
+  const s = document.getElementById("papers"); s.classList.add("open"); document.getElementById("papers-caret").textContent="▾";
+  renderPapers(); s.scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+/* image shrink: keeps uploads fast on cellular and storage small */
+async function loadBitmap(file){
+  try{ return await createImageBitmap(file); }catch(e){
+    return await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=URL.createObjectURL(file); });
+  }
+}
+async function shrink(file, max, q){
+  const bmp = await loadBitmap(file);
+  const w = bmp.width, h = bmp.height, s = Math.min(1, max/Math.max(w,h));
+  const cv = document.createElement("canvas"); cv.width=Math.round(w*s); cv.height=Math.round(h*s);
+  cv.getContext("2d").drawImage(bmp,0,0,cv.width,cv.height);
+  return await new Promise(res=>cv.toBlob(res,"image/jpeg",q));
+}
+async function putSigned(url, blob, mime){
+  const r = await fetch(url,{method:"PUT",headers:{"content-type":mime,"x-upsert":"true"},body:blob});
+  if(!r.ok) throw new Error("upload "+r.status);
+}
+
+/* capture flow */
+document.getElementById("cap-camera").addEventListener("change", ev=>{ if(ev.target.files.length) fileSheet([...ev.target.files]); ev.target.value=""; });
+document.getElementById("cap-choose").addEventListener("change", ev=>{ if(ev.target.files.length) fileSheet([...ev.target.files]); ev.target.value=""; });
+
+function fileSheet(files){
+  const first = files[0]; const isImg = first.type.startsWith("image/");
+  const cat = defaultBox ? (BOX_CAT[defaultBox.title]||"personal") : "personal";
+  let sel = {cat, box: defaultBox?defaultBox.id:null};
+  card.innerHTML = `<div class="sheet-title">${files.length>1?files.length+" documents":"New document"}</div>
+    ${isImg?`<img class="preview" id="cap-preview" alt="">`:`<div class="pdf" style="padding:18px;text-align:center;color:var(--dim)">PDF ready</div>`}
+    <div class="field-label">Filed under</div><div class="cat-chips" id="s-cats"></div>
+    <div class="field-label">Belongs to a box (optional)</div><div class="cat-chips" id="s-boxes"></div>
+    <input id="s-title" placeholder="Title (optional, e.g. October rent notice)">
+    <input id="s-date" type="date" value="${todayYmd()}">
+    <input id="s-note" placeholder="Note (optional)">
+    <div class="prog-bar" id="s-prog" style="display:none"><i></i></div>
+    <div class="sheet-row"><button id="s-cancel">Cancel</button><button class="save" id="s-save">File it</button></div>`;
+  sheet.classList.add("open");
+  if(isImg){ const im=document.getElementById("cap-preview"); im.src=URL.createObjectURL(first); }
+  const cats = document.getElementById("s-cats");
+  const paintCats = ()=>{ cats.innerHTML = CATS.map(([k,l])=>`<span class="cat-chip${sel.cat===k?" sel":""}" data-k="${k}">${l}</span>`).join(""); cats.querySelectorAll(".cat-chip").forEach(c=>c.addEventListener("click",()=>{sel.cat=c.dataset.k; paintCats();})); };
+  const bx = document.getElementById("s-boxes");
+  const paintBoxes = ()=>{ bx.innerHTML = `<span class="cat-chip${!sel.box?" sel":""}" data-b="">None</span>`+board.boxes.map(b=>`<span class="cat-chip${sel.box===b.id?" sel":""}" data-b="${b.id}">${esc(b.title)}</span>`).join(""); bx.querySelectorAll(".cat-chip").forEach(c=>c.addEventListener("click",()=>{sel.box=c.dataset.b||null; if(sel.box){const b=board.boxes.find(x=>x.id===sel.box); if(b&&BOX_CAT[b.title]){sel.cat=BOX_CAT[b.title]; paintCats();}} paintBoxes();})); };
+  paintCats(); paintBoxes();
+  document.getElementById("s-cancel").addEventListener("click", closeSheet);
+  document.getElementById("s-save").addEventListener("click", ()=>uploadFiles(files, sel));
+}
+async function uploadFiles(files, sel){
+  const $ = id=>document.getElementById(id);
+  const title = $("s-title").value.trim(), date = $("s-date").value||null, note = $("s-note").value.trim();
+  const prog = $("s-prog"), bar = prog.querySelector("i"); prog.style.display="block";
+  $("s-save").disabled = true; $("s-save").innerHTML = `<span class="spin"></span>Filing`;
+  let n = 0;
+  for(const file of files){
+    try{
+      const isImg = file.type.startsWith("image/");
+      const id = crypto.randomUUID();
+      const ext = isImg ? "jpg" : (file.name.split(".").pop()||"pdf");
+      const prep = await papersApi("prepare",{id, ext, thumb:isImg});
+      let mainBlob = file, mime = file.type||"application/pdf";
+      if(isImg){ mainBlob = await shrink(file, 2000, 0.85); mime="image/jpeg"; }
+      await putSigned(prep.main.url, mainBlob, mime);
+      if(isImg && prep.thumb){ const th = await shrink(file, 360, 0.7); await putSigned(prep.thumb.url, th, "image/jpeg"); }
+      await papersApi("record",{id, category:sel.cat, title: title ? (files.length>1?`${title} (${n+1})`:title) : null, note: note||null, doc_date:date, storage_path:prep.main.path, thumb_path: isImg&&prep.thumb?prep.thumb.path:null, mime, size_bytes: mainBlob.size, box_id: sel.box});
+      n++; bar.style.width = Math.round(n/files.length*100)+"%";
+    }catch(e){ toast("One did not file: "+String(e).slice(0,60)); }
+  }
+  closeSheet(); toast(n===1?"Filed.":`${n} filed.`);
+  await loadPapers();
+}
+
+/* view and edit a filed paper */
+async function openPaper(p){
+  if(!p) return;
+  card.innerHTML = `<div class="sheet-title">${esc(p.title||CAT_LABEL[p.category]||"Document")}</div>
+    <div id="p-view" style="text-align:center"><span class="spin"></span></div>
+    <div class="field-label">Filed under</div><div class="cat-chips" id="p-cats"></div>
+    <div class="field-label">Box</div><div class="cat-chips" id="p-boxes"></div>
+    <input id="p-title" placeholder="Title" value="${esc(p.title||"")}">
+    <input id="p-date" type="date" value="${p.doc_date||""}">
+    <input id="p-note" placeholder="Note" value="${esc(p.note||"")}">
+    <div class="toolbtns"><button class="toolbtn h" id="p-open">Open full size</button></div>
+    <div class="sheet-row"><button class="del" id="p-del">Del</button><button id="p-cancel">Close</button><button class="save" id="p-save">Save</button></div>`;
+  sheet.classList.add("open");
+  let sel = {cat:p.category, box:p.box_id};
+  const cats=document.getElementById("p-cats"), bx=document.getElementById("p-boxes");
+  const paintCats=()=>{ cats.innerHTML=CATS.map(([k,l])=>`<span class="cat-chip${sel.cat===k?" sel":""}" data-k="${k}">${l}</span>`).join(""); cats.querySelectorAll(".cat-chip").forEach(c=>c.addEventListener("click",()=>{sel.cat=c.dataset.k;paintCats();})); };
+  const paintBoxes=()=>{ bx.innerHTML=`<span class="cat-chip${!sel.box?" sel":""}" data-b="">None</span>`+board.boxes.map(b=>`<span class="cat-chip${sel.box===b.id?" sel":""}" data-b="${b.id}">${esc(b.title)}</span>`).join(""); bx.querySelectorAll(".cat-chip").forEach(c=>c.addEventListener("click",()=>{sel.box=c.dataset.b||null;paintBoxes();})); };
+  paintCats(); paintBoxes();
+  let viewUrl = null;
+  try{ const v = await papersApi("view",{id:p.id}); viewUrl=v.url;
+    document.getElementById("p-view").innerHTML = (v.mime||"").startsWith("image/") ? `<img class="preview" src="${v.url}" alt="">` : `<div class="pdf" style="padding:16px;color:var(--dim)">PDF · ${Math.round((p.size_bytes||0)/1024)} KB</div>`;
+  }catch(e){ document.getElementById("p-view").innerHTML=`<div class="empty">Could not load the file right now.</div>`; }
+  document.getElementById("p-open").addEventListener("click", ()=>{ if(viewUrl) window.open(viewUrl,"_blank"); });
+  document.getElementById("p-cancel").addEventListener("click", closeSheet);
+  document.getElementById("p-save").addEventListener("click", async ()=>{
+    const patch = {id:p.id, category:sel.cat, box_id:sel.box, title:document.getElementById("p-title").value.trim()||null, doc_date:document.getElementById("p-date").value||null, note:document.getElementById("p-note").value.trim()||null};
+    closeSheet();
+    try{ await papersApi("set",patch); }catch(e){ toast("Could not save."); }
+    await loadPapers();
+  });
+  document.getElementById("p-del").addEventListener("click", async ()=>{
+    if(!confirm("Delete this document for good?")) return;
+    closeSheet();
+    try{ await papersApi("delete",{id:p.id}); }catch(e){ toast("Could not delete."); }
+    await loadPapers();
+  });
+}
+
+refresh().then(loadPapers);
 </script>
 </body>
 </html>

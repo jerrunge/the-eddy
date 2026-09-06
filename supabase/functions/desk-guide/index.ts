@@ -37,25 +37,30 @@ Deno.serve(async (req: Request) => {
   try {
     const mode = ["decide", "expand", "note"].includes(body.mode) ? body.mode : "update";
     const focusId = body.item_id ?? null;
-    const [boxesRes, itemsRes] = await Promise.all([
+    const [boxesRes, itemsRes, papersRes] = await Promise.all([
       sb.from("desk_boxes").select("id, title, why, deadline, position").eq("archived", false).order("position"),
       sb.from("desk_items").select("id, box_id, parent_item_id, kind, text, detail, done, due, body, options, choice, position").order("position"),
+      sb.from("papers").select("id, category, title, doc_date, box_id").eq("archived", false).order("doc_date", { ascending: false }).limit(200),
     ]);
     const boxes = boxesRes.data ?? [];
     const items = itemsRes.data ?? [];
+    const papers = papersRes.data ?? [];
     const board = boxes.map((b: any) => ({
       box_id: b.id, title: b.title, deadline: b.deadline,
       items: items.filter((i: any) => i.box_id === b.id && !i.parent_item_id).map((i: any) => ({
         item_id: i.id, text: i.text, kind: i.kind, done: i.done, due: i.due,
         subitems: items.filter((c: any) => c.parent_item_id === i.id).map((c: any) => ({ item_id: c.id, text: c.text, done: c.done })),
       })),
+      papers_filed: papers.filter((p: any) => p.box_id === b.id).map((p: any) => p.title || p.category),
     }));
+    const papersByCategory: Record<string, number> = {};
+    for (const p of papers as any[]) papersByCategory[p.category] = (papersByCategory[p.category] ?? 0) + 1;
     const focus = focusId ? items.find((i: any) => i.id === focusId) : null;
 
     const base = [
       `You maintain Jeremy's Harbor: boxes and checklists for everything occupying his mind during a heavy season (a move by Oct 30, a bankruptcy filing, an urgent job search, his autistic daughter Maddy's group-home search, a relationship with David in a painful maybe, loneliness, his dog Cooper's living). He has ADHD and OCD; a wall of undifferentiated tasks is exactly what overwhelms him, so your job is to make the next move obvious and small.`,
       `Voice: warm, plain, short, his register. NEVER an em dash. Never scold. Never add self-care filler. Never invent facts about his life he did not give you.`,
-      `Items have a kind: "task" (a checkbox), "note" (holds durable body text he is writing, e.g. what he needs from David, his two stories, Maddy's words), "decision" (holds options and a recorded choice). Items can have subitems (a sub-checklist). Use the exact ids from the board.`,
+      `Items have a kind: "task" (a checkbox), "note" (holds durable body text he is writing, e.g. what he needs from David, his two stories, Maddy's words), "decision" (holds options and a recorded choice). Items can have subitems (a sub-checklist). Use the exact ids from the board. Each box may list papers_filed: documents he photographed and filed to that box (mail, notices, statements). You cannot edit papers, but you can tell him what is already filed when it answers a question (e.g. which attorney documents he has captured).`,
       `Output ONLY a JSON object, no markdown fences: {"summary": "...", "ops": [...]}. Op types: {"op":"check","item_id"} | {"op":"uncheck","item_id"} | {"op":"add_item","box_id","text","detail":null,"due":null} | {"op":"add_subitems","parent_item_id","texts":["...","..."]} | {"op":"edit_item","item_id","text":?,"detail":?,"due":?} | {"op":"set_kind","item_id","kind":"task|note|decision"} | {"op":"set_body","item_id","body":"full replacement text"} | {"op":"append_body","item_id","text":"appended"} | {"op":"set_options","item_id","options":[{"label":"...","note":"..."}]} | {"op":"set_choice","item_id","choice":"..."} | {"op":"remove_item","item_id"} | {"op":"move_item","item_id","box_id"} | {"op":"add_box","title","why","deadline":null}. Empty ops is valid when he only asked or vented; then summary is your short honest reply.`,
     ];
     const modeLine: Record<string, string> = {
@@ -71,7 +76,7 @@ Deno.serve(async (req: Request) => {
       model: "claude-sonnet-4-6",
       max_tokens: 1800,
       system,
-      messages: [{ role: "user", content: `THE BOARD NOW:\n${JSON.stringify(board)}\n\n${focus ? `THE ITEM IN FOCUS: ${JSON.stringify({ id: focus.id, text: focus.text, kind: focus.kind, body: focus.body, options: focus.options })}\n\n` : ""}HIS WORDS:\n${text || "(he tapped the button without typing; use the item and board)"}` }],
+      messages: [{ role: "user", content: `THE BOARD NOW:\n${JSON.stringify(board)}\n\nPAPERS FILED BY CATEGORY: ${JSON.stringify(papersByCategory)}\n\n${focus ? `THE ITEM IN FOCUS: ${JSON.stringify({ id: focus.id, text: focus.text, kind: focus.kind, body: focus.body, options: focus.options })}\n\n` : ""}HIS WORDS:\n${text || "(he tapped the button without typing; use the item and board)"}` }],
     });
     let raw = msg.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("").trim();
     raw = raw.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
