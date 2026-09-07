@@ -6,7 +6,7 @@
 
 const FN = "https://dsjnvwhyevjzsmuawkcs.supabase.co/functions/v1";
 const VAPID_PUBLIC = "BAeWETFXv1Y5lpd25yux-QfGnzeV7qNkwfSQSh3s-wQg-B9VO_HafzvyGu5SfRuqBgPJoS4U2GqBcuaXV46xizc";
-const RESUME_WINDOW_MIN = 60;
+const RESUME_WINDOW_MIN = 240;
 
 /* ---------- pairing ---------- */
 if (location.hash.startsWith("#setup=")) {
@@ -129,9 +129,27 @@ async function resumeOrNull() {
   if (saved && (Date.now() - new Date(saved.opened_at).getTime()) / 60000 < RESUME_WINDOW_MIN) return saved;
   return null;
 }
+async function restoreStream() {
+  // a reopened episode redraws what was said, his words and the guide's, in order
+  const s = document.getElementById("ep-stream"); s.innerHTML = "";
+  const started = new Date(ep.opened_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  try {
+    const d = await api("episode", { episode_id: ep.id });
+    const rows = [
+      ...(d.entries || []).map((e) => ({ at: e.at, kind: "him", text: e.text })),
+      ...(d.replies || []).map((r) => ({ at: r.at, kind: "guide", text: r.reply })),
+    ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
+    if (!rows.length) { bubble("sys", "Picked up where you left off. Started " + started + "."); return; }
+    bubble("sys", "Picked up where you left off. Started " + started + ".");
+    for (const r of rows) bubble(r.kind, r.text);
+    bubble("sys", "Still the same loop. Keep going, or let it go below.");
+  } catch {
+    bubble("sys", "Picked up where you left off (started " + started + "). The earlier words are in your record; the wire is quiet right now.");
+  }
+}
 async function startEpisode() {
   const resumed = await resumeOrNull();
-  if (resumed) { ep = resumed; } else {
+  if (resumed) { ep = resumed; await restoreStream(); } else {
     ep = { id: crypto.randomUUID(), opened_at: new Date().toISOString() };
     await kvSet("open_episode", ep);
     enqueue("episode_open", { id: ep.id, opened_at: ep.opened_at, capacity: ctx?.capacity ?? null, sleep_h: ctx?.sleep_min != null ? +(ctx.sleep_min / 60).toFixed(1) : null, entry_mode: "typed" });
@@ -495,5 +513,5 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
   await loadContext();
   flush();
   const open = await resumeOrNull();
-  if (open) { ep = open; document.getElementById("ep-clock").textContent = "resumed"; show("ep"); }
+  if (open) { ep = open; document.getElementById("ep-clock").textContent = "resumed"; show("ep"); restoreStream(); }
 })();
