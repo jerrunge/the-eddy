@@ -105,6 +105,7 @@ function renderContext() {
   if (ctx?.sleep_min != null) bits.push("slept " + (ctx.sleep_min / 60).toFixed(1) + "h");
   if (ctx?.capacity) bits.push(ctx.capacity);
   el.textContent = bits.join(" · ");
+  renderContinue();
   const banner = document.getElementById("parks-banner");
   const due = ctx?.parks_due || [];
   if (due.length) {
@@ -146,6 +147,27 @@ async function restoreStream() {
   } catch {
     bubble("sys", "Picked up where you left off (started " + started + "). The earlier words are in your record; the wire is quiet right now.");
   }
+}
+async function reopenEpisode(e) {
+  if (!e || !e.id) return;
+  ep = { id: e.id, opened_at: e.opened_at };
+  await kvSet("open_episode", ep);
+  if (e.closed_at) enqueue("episode_reopen", { id: e.id });
+  document.getElementById("ep-clock").textContent = "resumed";
+  show("ep");
+  await restoreStream();
+  document.getElementById("dump").focus();
+}
+function renderContinue() {
+  const b = document.getElementById("btn-continue"); if (!b) return;
+  const le = ctx && ctx.last_episode;
+  const fresh = le && (Date.now() - new Date(le.opened_at).getTime()) < 14 * 86400000;
+  if (!fresh) { b.classList.add("hidden"); return; }
+  const when = new Date(le.opened_at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
+  const first = (le.first || "").slice(0, 70);
+  b.textContent = "Continue the last loop (" + when + ")" + (first ? ": " + first + (le.first.length > 70 ? "..." : "") : "");
+  b.classList.remove("hidden");
+  b.onclick = () => reopenEpisode(le);
 }
 async function startEpisode() {
   const resumed = await resumeOrNull();
@@ -411,6 +433,9 @@ async function loadRecord() {
     const when = new Date(e.opened_at).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     row.innerHTML = '<div class="when">' + when + " · " + (e.minutes ?? "?") + " min · " + (e.ended_by ?? "open") + '</div><div class="first"></div>';
     row.querySelector(".first").textContent = firstByEp[e.id] || "";
+    row.style.cursor = "pointer";
+    const hint = document.createElement("div"); hint.className = "dim"; hint.style.fontSize = ".72rem"; hint.textContent = "tap to continue this loop"; row.appendChild(hint);
+    row.addEventListener("click", () => reopenEpisode(e));
     body.appendChild(row);
   }
 }
