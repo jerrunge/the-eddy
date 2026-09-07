@@ -1,6 +1,6 @@
 /* The Eddy service worker v1. Shell cached for offline capture; push carries the
    park knocks. Bump VERSION on every deploy (the fortify-room lesson). */
-const VERSION = "eddy-v3";
+const VERSION = "eddy-v4";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -30,14 +30,12 @@ self.addEventListener("push", (e) => {
     body: data.body || "A parked loop is ready for you.",
     icon: "icon-192.png",
     badge: "icon-192.png",
-    data: { park_id: data.park_id || null, url: data.url || null },
+    data: { park_id: data.park_id || null },
   }));
 });
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
-  const url = e.notification.data && e.notification.data.url;
   e.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-    if (url) return clients.openWindow(url);
     for (const c of list) { if ("focus" in c) return c.focus(); }
     return clients.openWindow("./");
   }));
