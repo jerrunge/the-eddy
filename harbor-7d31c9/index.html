@@ -6,6 +6,10 @@
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#EDF1F1">
 <title>The Harbor</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Harbor">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -147,7 +151,7 @@
   <p class="sub">Everything on your mind, moored. Tap a heavy one to break it down, decide it, or write it out.</p>
 </header>
 <div class="soon" id="soon"></div>
-<div class="topbar" id="topbar" style="display:none"><button id="toggle-all">Expand all</button></div>
+<div class="topbar" id="topbar" style="display:none"><button id="knocks-btn" title="Notifications for this phone">Knocks: checking</button><button id="toggle-all">Expand all</button></div>
 <main id="board"></main>
 <div class="pairing" id="pairing" style="display:none">
   <p class="sub">Not paired on this device. Paste your pairing link or token once:</p>
@@ -184,6 +188,32 @@
 <script>
 "use strict";
 const FN = "https://dsjnvwhyevjzsmuawkcs.supabase.co/functions/v1";
+const VAPID_PUBLIC = "BAeWETFXv1Y5lpd25yux-QfGnzeV7qNkwfSQSh3s-wQg-B9VO_HafzvyGu5SfRuqBgPJoS4U2GqBcuaXV46xizc";
+let PUSH_ENDPOINTS = [];
+if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+function urlB64ToUint8(s){ const pad = "=".repeat((4 - (s.length % 4)) % 4); const b = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+async function knocksState(){
+  const btn = document.getElementById("knocks-btn"); if (!btn) return;
+  if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) { btn.textContent = "Knocks: not here"; btn.disabled = true; return; }
+  try {
+    const reg = await navigator.serviceWorker.ready; const sub = await reg.pushManager.getSubscription();
+    const on = !!sub && Notification.permission === "granted" && PUSH_ENDPOINTS.includes(sub.endpoint);
+    btn.textContent = on ? "Knocks: on" : "Turn on knocks"; btn.dataset.on = on ? "1" : "";
+  } catch(e) { btn.textContent = "Turn on knocks"; }
+}
+async function knocksToggle(){
+  const btn = document.getElementById("knocks-btn");
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    if (btn.dataset.on) { const sub = await reg.pushManager.getSubscription(); if (sub) { await api("push_unsubscribe", { endpoint: sub.endpoint }); await sub.unsubscribe(); } PUSH_ENDPOINTS = []; toast("Knocks are off for this phone."); return knocksState(); }
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Knocks stay off. On iPhone they only work from the installed Harbor (Share, then Add to Home Screen)."); return; }
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8(VAPID_PUBLIC) });
+    const raw = sub.toJSON();
+    await api("push_subscribe", { endpoint: raw.endpoint, p256dh: raw.keys.p256dh, auth: raw.keys.auth, ua: navigator.userAgent.slice(0, 120) });
+    PUSH_ENDPOINTS = [raw.endpoint]; toast("Knocks are on for this phone."); knocksState();
+  } catch(e) { toast("Could not turn on knocks here: " + String(e).slice(0, 80)); }
+}
 // Token handling that survives Safari's iframe storage block: hold it in memory
 // for the session, and try localStorage as a bonus. The Webflow frame passes the
 // token in the URL every load, so a blocked localStorage never forces a re-paste.
@@ -215,6 +245,7 @@ async function api(op, extra={}){
 async function refresh(){
   try{
     board = await api("board");
+    PUSH_ENDPOINTS = board.push_endpoints || []; knocksState();
     document.getElementById("pairing").style.display="none";
     render();
   }catch(e){
@@ -426,6 +457,7 @@ document.getElementById("pair-btn").addEventListener("click", async ()=>{
   setToken(decodeURIComponent(t));
   await refresh();
 });
+document.getElementById("knocks-btn").addEventListener("click", knocksToggle);
 document.getElementById("toggle-all").addEventListener("click", ()=>{
   allExpanded = !allExpanded;
   for(const b of board.boxes) expandedBoxes[b.id] = allExpanded;
