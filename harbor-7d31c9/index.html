@@ -65,6 +65,9 @@
   .prog{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.62rem; color:var(--harbor); letter-spacing:.06em; cursor:pointer;}
   .chev{color:var(--faint); font-size:.7rem; cursor:pointer; user-select:none;}
   .snippet{color:var(--dim); font-size:.8rem; margin-top:2px; white-space:pre-wrap; max-height:2.7em; overflow:hidden;}
+  .linkrow{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
+  .openlink{display:inline-block; background:var(--harbor); color:#fff; text-decoration:none; font-size:.78rem; font-weight:600; padding:6px 11px; border-radius:999px;}
+  .openlink:active{opacity:.85}
   .chosen{font-size:.78rem; color:var(--harbor); margin-top:3px;}
   .chosen b{color:var(--harbor)}
   .subs{list-style:none; margin:0 0 6px 33px; padding:0; display:none;}
@@ -233,6 +236,7 @@ let allExpanded = false;
 const HUES = {clay:"--h-clay",amber:"--h-amber",moss:"--h-moss",slate:"--h-slate",harbor:"--h-harbor",dusk:"--h-dusk",gold:"--h-gold",russet:"--h-russet",teal:"--h-teal"};
 const fmt = d => new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
 const todayYmd = () => new Date().toLocaleDateString("en-CA");
+function linkButtons(text){ const urls=[...new Set((String(text||"").match(/https?:\/\/[^\s<]+[^\s<.,;:)]/g)||[]))]; if(!urls.length) return ""; return `<div class="linkrow">${urls.map(u=>`<a class="openlink" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Open ${esc(u.replace(/^https?:\/\//,"").split("/")[0])} ↗</a>`).join("")}</div>`; }
 function linkify(h){ return String(h).replace(/(https?:\/\/[^\s<]+[^\s<.,;:)])/g, (u)=>`<a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${u.replace(/^https?:\/\//,"")}</a>`); }
 const esc = s => String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const kids = id => board.items.filter(i=>i.parent_item_id===id).sort((a,b)=>a.position-b.position);
@@ -311,7 +315,7 @@ function renderItem(i){
   const chosen = i.kind==="decision" && i.choice ? `<div class="chosen">Your call: <b>${esc(i.choice)}</b></div>` : "";
   li.innerHTML = `<div class="item-main">
       <span class="tick">✓</span>
-      <span class="item-body"><span class="item-text">${esc(i.text)}${tag}</span>${i.detail?`<div class="item-detail">${linkify(esc(i.detail))}</div>`:""}${snippet}${chosen}${(meta||subs.length)?`<div class="meta">${meta}${subs.length?`<span class="chev">${openBoxes[i.id]?"▾ hide":"▸ steps"}</span>`:""}</div>`:""}</span>
+      <span class="item-body"><span class="item-text">${esc(i.text)}${tag}</span>${i.detail?`<div class="item-detail">${linkify(esc(i.detail))}</div>`:""}${snippet}${linkButtons((i.body||"")+" "+(i.detail||""))}${chosen}${(meta||subs.length)?`<div class="meta">${meta}${subs.length?`<span class="chev">${openBoxes[i.id]?"▾ hide":"▸ steps"}</span>`:""}</div>`:""}</span>
     </div><ul class="subs"></ul>`;
   li.querySelector(".tick").addEventListener("click", ev=>{ ev.stopPropagation(); toggle(i); });
   li.querySelector(".item-body").addEventListener("click", ()=>openSheet(i));
@@ -356,7 +360,7 @@ function openSheet(i){
     html += `<div class="field-label">Your call</div><input id="e-choice" placeholder="Type your decision when you are ready" value="${esc(i.choice||"")}">`;
     html += `<div class="toolbtns"><button class="toolbtn" id="btn-decide">Help me decide</button><button class="toolbtn h" id="btn-expand">Break into steps</button></div>`;
   } else if(i.kind==="note"){
-    html += `<div class="field-label">This note lives in your database</div><textarea id="e-body" rows="9" placeholder="Write freely. It saves and syncs.">${esc(i.body||"")}</textarea>`;
+    html += linkButtons(i.body) + `<div class="field-label">This note lives in your database</div><textarea id="e-body" rows="9" placeholder="Write freely. It saves and syncs.">${esc(i.body||"")}</textarea>`;
     html += `<div class="toolbtns"><button class="toolbtn n" id="btn-note">Help me write this</button></div>`;
   } else {
     html += `<textarea id="e-text" rows="2" aria-label="Item">${esc(i.text)}</textarea>`;
