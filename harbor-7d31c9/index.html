@@ -233,6 +233,7 @@ let allExpanded = false;
 const HUES = {clay:"--h-clay",amber:"--h-amber",moss:"--h-moss",slate:"--h-slate",harbor:"--h-harbor",dusk:"--h-dusk",gold:"--h-gold",russet:"--h-russet",teal:"--h-teal"};
 const fmt = d => new Date(d+"T12:00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
 const todayYmd = () => new Date().toLocaleDateString("en-CA");
+function linkify(h){ return String(h).replace(/(https?:\/\/[^\s<]+[^\s<.,;:)])/g, (u)=>`<a href="${u}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${u.replace(/^https?:\/\//,"")}</a>`); }
 const esc = s => String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const kids = id => board.items.filter(i=>i.parent_item_id===id).sort((a,b)=>a.position-b.position);
 const byId = id => board.items.find(i=>i.id===id);
@@ -306,11 +307,11 @@ function renderItem(i){
   let meta = "";
   if(subs.length) meta += `<span class="prog">${doneSubs}/${subs.length}</span>`;
   if(i.due && !i.done) meta += `<span class="due${duePast?" past":""}">${duePast?"was due ":"due "}${fmt(i.due)}</span>`;
-  const snippet = i.kind==="note" && i.body && i.body.trim() ? `<div class="snippet">${esc(i.body.trim())}</div>` : "";
+  const snippet = i.kind==="note" && i.body && i.body.trim() ? `<div class="snippet">${linkify(esc(i.body.trim()))}</div>` : "";
   const chosen = i.kind==="decision" && i.choice ? `<div class="chosen">Your call: <b>${esc(i.choice)}</b></div>` : "";
   li.innerHTML = `<div class="item-main">
       <span class="tick">✓</span>
-      <span class="item-body"><span class="item-text">${esc(i.text)}${tag}</span>${i.detail?`<div class="item-detail">${esc(i.detail)}</div>`:""}${snippet}${chosen}${(meta||subs.length)?`<div class="meta">${meta}${subs.length?`<span class="chev">${openBoxes[i.id]?"▾ hide":"▸ steps"}</span>`:""}</div>`:""}</span>
+      <span class="item-body"><span class="item-text">${esc(i.text)}${tag}</span>${i.detail?`<div class="item-detail">${linkify(esc(i.detail))}</div>`:""}${snippet}${chosen}${(meta||subs.length)?`<div class="meta">${meta}${subs.length?`<span class="chev">${openBoxes[i.id]?"▾ hide":"▸ steps"}</span>`:""}</div>`:""}</span>
     </div><ul class="subs"></ul>`;
   li.querySelector(".tick").addEventListener("click", ev=>{ ev.stopPropagation(); toggle(i); });
   li.querySelector(".item-body").addEventListener("click", ()=>openSheet(i));
