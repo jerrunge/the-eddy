@@ -236,6 +236,24 @@ function render(){
   const h = new Date().getHours(); document.getElementById("hello").textContent = h<12?"Morning, Dad.":h<17?"Afternoon, Dad.":"Evening, Dad.";
   renderNumbers(); renderNext(); renderToday(); renderBody(); renderWork(); renderPeople(); renderVentures(); renderDates(); renderGoals();
   document.getElementById("foot").innerHTML = `Everything here is yours. No caps, no gates, nothing hidden. Served ${tstr(B.served_at)}.`;
+  handToNative();
+}
+// the native shell (29:11 on iPhone, iPad, Mac) listens here: the widget, the wrist, and the local knocks read this and nothing else
+function handToNative(){
+  try {
+    const h = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.face; if (!h) return;
+    const arc = weightArc(); const done = new Set(B.completions.map(c=>c.template_id)); const active = B.routines.filter(r=>!r.paused);
+    const nextEl = document.querySelectorAll("#next .row .t b"); const next = [...nextEl].slice(0,3).map(b=>b.textContent);
+    h.postMessage(JSON.stringify({
+      date: B.today,
+      offHigh: arc ? Number(arc.off.toFixed(1)) : null, latestLb: arc ? arc.last.lb : null, highLb: arc ? arc.hi.lb : null,
+      routineLeft: active.filter(r=>!done.has(r.id)).length, routineTotal: active.length,
+      next,
+      timed: active.filter(r=>r.window_start && !done.has(r.id)).map(r=>({ id:r.id, title:r.title, hhmm:String(r.window_start).slice(0,5) })),
+      meds: B.medications.filter(m=>m.active).map(m=>({ name:m.name, timing:m.timing })),
+      blocks: BLOCKS.map(([name,anchors]) => ({ name, left: active.filter(r=>anchors.includes(r.anchor||"wake") && !done.has(r.id)).length })),
+    }));
+  } catch(e) {}
 }
 
 // ---------- NUMBERS ----------
