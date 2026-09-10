@@ -308,7 +308,8 @@ function facts(){
 }
 async function readDay(){
   const btn = document.getElementById("read-btn"); btn.disabled = true; btn.textContent = "Reading…";
-  try { const r = await api("read", { facts: facts() }); const d = r.read;
+  try { const r = await api("read", { facts: facts() }); let d = r.read;
+    if (d && typeof d.line === "string" && d.line.trim().startsWith("{")) { try { d = JSON.parse(d.line.replace(/[ -]+/g, " ")); } catch(e) {} }
     document.getElementById("read-card").innerHTML = `<div class="read"><div class="k">The read · ${tstr(new Date().toISOString())}</div><div class="line">${E(d.line)}</div>${d.number?`<div class="num">${E(d.number)}</div>`:""}<div class="ev">${(d.evidence||[]).map(e=>`<span>· ${E(e)}</span>`).join("")}</div><div class="acts" style="margin-top:10px"><button class="btn ghost" id="read-btn">Read again</button></div></div>`;
     document.getElementById("read-btn").onclick = readDay;
   } catch(e){ btn.disabled=false; btn.textContent="Read the day"; toast("No read: "+e.message, 3000); }
