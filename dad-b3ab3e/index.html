@@ -229,10 +229,19 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
       var n = cards[idx+1];
       $('tomorrow').textContent = n ? ('Tomorrow: Day '+n.day+', '+n.frame+', photo '+String(n.photo).split(' (')[0]+'.') : 'Day 14: ten minutes on Sunday and three numbers to homebase.';
       $('prev').disabled = idx===0; $('next').disabled = idx===cards.length-1;
+      var db = $('done'); if (DAYS[k.day]) { db.textContent='Posted. Undo'; db.setAttribute('data-done','1'); } else { db.textContent='Done'; db.removeAttribute('data-done'); }
     }
     $('prev').onclick=function(){ if(idx>0){idx--;paint();} };
     $('next').onclick=function(){ if(idx<cards.length-1){idx++;paint();} };
     $('reset').onclick=function(){ idx=Math.min(Math.max(todayIdx,0),cards.length-1); paint(); };
+    $('done').onclick=function(){
+      var k=cards[idx]; var want = !DAYS[k.day]; var b=$('done'); b.disabled=true;
+      fetch(API, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ token: token(), op: 'day_done', day: k.day, done: want, source: 'hub' }) })
+        .then(function(r){ return r.json(); })
+        .then(function(d){ if (d && d.ok) { DAYS[k.day] = want; paint(); status.className='status'; status.textContent = want ? ('Day '+k.day+' marked posted. The record has it.') : ('Day '+k.day+' back to open.'); } else { status.className='status err'; status.textContent='Could not save: '+((d&&d.error)||'unknown'); } })
+        .catch(function(){ status.className='status err'; status.textContent='Offline; not saved.'; })
+        .then(function(){ b.disabled=false; });
+    };
     var toast=$('toast'), tt;
     app.querySelectorAll('.copy').forEach(function(b){
       b.onclick=function(){
