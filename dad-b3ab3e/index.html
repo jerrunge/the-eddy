@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="theme-color" content="#F7F4EE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0B0F11" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Dad">
+<title>Everything Dad</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,WONK@0,9..144,400..900,1;1,9..144,400..900,1&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F7F4EE; --ground-2:#EFEBE2; --text:#141416; --soft:#4A4A4F; --rule:#D9D4C8; --fog:#8FA3AA;
+  --paper:#F7F4EE; --paper-2:#EFEBE2; --paper-ink:#141416; --paper-soft:#4A4A4F; --paper-rule:#D9D4C8; --coral:#E8542F; --coral-ink:#BF3D1C; --coral-soft:#FBE6DF;
+  --ink:#0F1416; --ink-2:#161D20; --ink-text:#F1ECE2; --ink-soft:#A9A59B; --ink-rule:#2A3235; --ember:#D98A5B; --ember-soft:#3A2A20;
+  --ok:#2F7D4F; --ok-soft:#DDEFE3; --ask:#8A6D1F; --ask-soft:#F5EBCB; --stale:#7A5A5A; --stale-soft:#EFDEDE;
+  --focus:#E8542F;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0B0F11; --ground-2:#12181B; --text:#F1ECE2; --soft:#B5B0A6; --rule:#252D31; --fog:#7F9299;
+    --ok:#7FD0A0; --ok-soft:#173224; --ask:#E3C36A; --ask-soft:#3A3116; --stale:#D0A0A0; --stale-soft:#3A2626;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0B0F11; --ground-2:#12181B; --text:#F1ECE2; --soft:#B5B0A6; --rule:#252D31; --fog:#7F9299;
+  --ok:#7FD0A0; --ok-soft:#173224; --ask:#E3C36A; --ask-soft:#3A3116; --stale:#D0A0A0; --stale-soft:#3A2626;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--text);font-family:"Public Sans",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
+.kicker{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--fog)}
+h1,h2,h3{font-family:"Fraunces","Iowan Old Style",Georgia,serif;text-wrap:balance;margin:0;font-variation-settings:"opsz" 144,"WONK" 1}
+.mast{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;border-bottom:1.5px solid var(--rule);padding-bottom:16px;flex-wrap:wrap}
+.mast h1{font-size:clamp(2.4rem,6vw,3.6rem);font-weight:700;line-height:.95;letter-spacing:-.02em}
+.mast h1 b{font-weight:900;color:var(--coral)}
+.mast .sub{font-family:"Fraunces",Georgia,serif;font-style:italic;font-size:1.1rem;color:var(--soft);margin-top:8px}
+.mast .date{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.8rem;color:var(--soft);text-align:right;line-height:1.6}
+.mast .date b{display:block;color:var(--text);font-weight:500}
+
+/* today */
+.today{margin-top:26px;border:1.5px solid var(--rule);border-radius:14px;background:var(--ground-2);padding:18px 20px 20px;display:grid;grid-template-columns:1.2fr .8fr;gap:22px}
+@media (max-width:760px){.today{grid-template-columns:1fr}}
+.today .head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;grid-column:1 / -1;flex-wrap:wrap}
+.today .head h2{font-size:1.65rem;font-weight:900;letter-spacing:-.01em}
+.today .head h2 small{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fog);font-weight:400;display:block;margin-bottom:4px}
+.nav{display:flex;gap:6px;align-items:center}
+.nav button{font:inherit;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.78rem;padding:6px 10px;border:1.5px solid var(--rule);border-radius:999px;background:transparent;color:var(--text);cursor:pointer}
+.nav button:hover{border-color:var(--coral)}
+.nav button:focus-visible,.copy:focus-visible,a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.post{border:1.5px solid var(--rule);border-radius:10px;background:var(--ground);padding:14px 14px 12px;display:flex;flex-direction:column;gap:10px}
+.post .lab{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.post .lab .kicker{color:var(--soft)}
+.post p{margin:0;white-space:pre-wrap;font-size:1rem;line-height:1.55;max-width:62ch}
+.copy{font:inherit;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.74rem;letter-spacing:.06em;padding:5px 11px;border-radius:999px;border:1.5px solid var(--coral);background:var(--coral);color:#fff;cursor:pointer}
+.copy[data-done="1"]{background:transparent;color:var(--coral)}
+.meta{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;align-content:start;font-size:.92rem}
+.meta dt{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.7rem;letter-spacing:.12em;text-transform:uppercase;color:var(--fog);padding-top:4px}
+.meta dd{margin:0;color:var(--text)}
+.meta dd.q{color:var(--soft)}
+.tomorrow{grid-column:1 / -1;border-top:1px dashed var(--rule);padding-top:10px;font-size:.92rem;color:var(--soft);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tomorrow a{color:var(--coral-ink);font-weight:600;text-decoration:none}
+.tomorrow a:hover{text-decoration:underline}
+
+/* the doors */
+.doors{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}
+@media (max-width:760px){.doors{grid-template-columns:1fr}}
+.door{border-radius:16px;padding:22px 22px 18px;display:flex;flex-direction:column;gap:14px;min-height:100%}
+.door.a{background:var(--paper);color:var(--paper-ink);border:1.5px solid var(--paper-rule)}
+.door.b{background:var(--ink);color:var(--ink-text);border:1.5px solid var(--ink-rule)}
+.door .kicker{margin-bottom:-6px}
+.door.a .kicker{color:var(--coral-ink)}
+.door.b .kicker{color:var(--ember)}
+.door h2{font-size:clamp(1.9rem,4vw,2.5rem);font-weight:900;line-height:1;letter-spacing:-.015em}
+.door.a h2 b{color:var(--coral)}
+.door.b h2 b{color:var(--ember)}
+.door .law{font-family:"Fraunces",Georgia,serif;font-style:italic;font-size:1rem;margin:0}
+.door.a .law{color:var(--paper-soft)}
+.door.b .law{color:var(--ink-soft)}
+.links{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.links li a{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;text-decoration:none;padding:12px 14px;border-radius:12px;border:1.5px solid transparent}
+.door.a .links li a{border-color:var(--paper-rule);background:rgba(255,255,255,.45)}
+.door.b .links li a{border-color:var(--ink-rule);background:var(--ink-2)}
+.door.a .links li a:hover{border-color:var(--coral)}
+.door.b .links li a:hover{border-color:var(--ember)}
+.links .t{font-weight:700;font-size:1.02rem;line-height:1.25}
+.links .u{display:block;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;margin-top:2px;font-weight:400}
+.door.a .links .u{color:var(--paper-soft)}
+.door.b .links .u{color:var(--ink-soft)}
+.pill{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;padding:4px 9px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.ask{background:var(--ask-soft);color:var(--ask)}
+.pill.stale{background:var(--stale-soft);color:var(--stale)}
+.door.b .pill.ok{background:#173224;color:#7FD0A0}
+.door.b .pill.ask{background:#3A3116;color:#E3C36A}
+.door.a .pill.ok{background:#DDEFE3;color:#2F7D4F}
+.door.a .pill.ask{background:#F5EBCB;color:#8A6D1F}
+.door .foot{margin-top:auto;font-size:.86rem;padding-top:6px}
+.door.a .foot{color:var(--paper-soft)}
+.door.b .foot{color:var(--ink-soft)}
+.door .foot b{font-weight:600}
+
+/* desk + files */
+section.plain{margin-top:36px}
+section.plain h2{font-size:1.5rem;font-weight:900;letter-spacing:-.01em;margin-bottom:4px}
+section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
+.desk{list-style:none;margin:0;padding:0;border-top:1.5px solid var(--rule)}
+.desk li{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.6fr) auto;gap:8px 18px;align-items:start;padding:14px 0;border-bottom:1px solid var(--rule)}
+@media (max-width:760px){.desk li{grid-template-columns:1fr;gap:6px}}
+.desk a.t{font-family:"Fraunces",Georgia,serif;font-weight:700;font-size:1.15rem;text-decoration:none;line-height:1.2;font-variation-settings:"opsz" 72,"WONK" 1}
+.desk a.t:hover{color:var(--coral-ink);text-decoration:underline}
+.desk .w{font-size:.93rem;color:var(--soft);margin:0}
+.desk .w b{color:var(--text);font-weight:600}
+.desk .d{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;color:var(--fog);text-align:right;line-height:1.7}
+@media (max-width:760px){.desk .d{text-align:left}}
+.files{display:grid;grid-template-columns:auto 1fr;gap:8px 18px;margin:0;font-size:.95rem;border-top:1.5px solid var(--rule);padding-top:12px}
+.files dt{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--fog);padding-top:4px}
+.files dd{margin:0}
+.files dd a{text-decoration:none;font-weight:600}
+.files dd a:hover{text-decoration:underline;color:var(--coral-ink)}
+.files dd span{color:var(--soft)}
+
+/* mock note */
+.note{margin-top:40px;border:1.5px dashed var(--rule);border-radius:12px;padding:16px 18px;font-size:.93rem;color:var(--soft)}
+.note h3{font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:6px}
+.note ol{margin:6px 0 0;padding-left:20px}
+.note li{margin:4px 0}
+.note li b{color:var(--text);font-weight:600}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--ground);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.78rem;padding:9px 14px;border-radius:999px;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+
+.pair{margin-top:26px;border:1.5px solid var(--rule);border-radius:14px;background:var(--ground-2);padding:18px 20px;max-width:560px}
+.pair h2{font-size:1.4rem;font-weight:900;margin-bottom:6px}
+.pair p{margin:0 0 10px;color:var(--soft);font-size:.95rem}
+.pair form{display:flex;gap:8px;flex-wrap:wrap}
+.pair input{flex:1 1 220px;font:inherit;padding:10px 12px;border:1.5px solid var(--rule);border-radius:10px;background:var(--ground);color:var(--text)}
+.pair button{font:inherit;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.8rem;padding:10px 16px;border-radius:999px;border:1.5px solid var(--coral);background:var(--coral);color:#fff;cursor:pointer}
+.status{margin-top:18px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.74rem;color:var(--fog)}
+.status.err{color:var(--stale)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <div class="kicker" id="kicker">One page for all of it</div>
+      <h1>Everything <b>Dad</b></h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="date" id="today-date"></div>
+  </header>
+  <div id="app"></div>
+  <div class="status" id="status"></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite">Copied</div>
+<script>
+(function(){
+  // The shell. Everything it shows arrives from the hub-api door, gated by the same device token as the Harbor.
+  var API = 'https://dsjnvwhyevjzsmuawkcs.supabase.co/functions/v1/hub-api';
+  var $ = function(id){ return document.getElementById(id); };
+  var app = $('app'), status = $('status');
+  var DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function fmt(d){ return DOW[d.getUTCDay()]+', '+MON[d.getUTCMonth()]+' '+d.getUTCDate(); }
+  function pacificToday(){
+    var f = new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',year:'numeric',month:'2-digit',day:'2-digit'});
+    var p = {}; f.formatToParts(new Date()).forEach(function(x){ p[x.type]=x.value; });
+    return new Date(Date.UTC(+p.year,+p.month-1,+p.day));
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function token(){ try { return localStorage.getItem('eddy_token') || ''; } catch(e) { return ''; } }
+  function cacheGet(){ try { return JSON.parse(localStorage.getItem('hub_cache')||'null'); } catch(e) { return null; } }
+  function cacheSet(c){ try { localStorage.setItem('hub_cache', JSON.stringify(c)); } catch(e) {} }
+  var today = pacificToday();
+  $('today-date').innerHTML = '<b>'+fmt(today)+'</b>Pacific';
+
+  function pairing(msg){
+    app.innerHTML = '<section class="pair"><h2>Pair this device</h2><p>'+esc(msg||'This page shares the Harbor\'s pairing. Open the Harbor once on this device, or paste the device token here.')+'</p>'+
+      '<form id="pf"><input id="pt" type="password" autocomplete="off" placeholder="device token" aria-label="Device token"><button type="submit">Pair</button></form></section>';
+    $('pf').onsubmit = function(e){ e.preventDefault(); var v=$('pt').value.trim(); if(!v) return; try{ localStorage.setItem('eddy_token', v); }catch(err){} load(true); };
+  }
+
+  function render(c, note){
+    var DAY0 = new Date(c.day0+'T00:00:00Z');
+    var cards = c.cards||[];
+    var todayIdx = Math.round((today - DAY0)/86400000);
+    var idx = Math.min(Math.max(todayIdx,0), cards.length-1);
+    $('sub').textContent = c.sub||''; $('kicker').textContent = c.kicker||'';
+    var h = '';
+    h += '<section class="today" aria-labelledby="today-h"><div class="head"><h2 id="today-h"><small id="today-kicker"></small><span id="today-frame"></span></h2>'+
+      '<div class="nav"><button type="button" id="prev">&larr; prev</button><button type="button" id="next">next &rarr;</button><button type="button" id="reset">today</button></div></div>'+
+      '<div class="post"><div class="lab"><span class="kicker" id="x-lab">X and Bluesky, 7:30am</span><button type="button" class="copy" data-for="x">Copy</button></div><p id="x-text"></p></div>'+
+      '<div><dl class="meta"><dt>Photo</dt><dd id="m-photo"></dd><dt>Where</dt><dd id="m-plat"></dd><dt>Alt</dt><dd class="q" id="m-alt"></dd></dl>'+
+      '<div class="post" id="ig-box" style="margin-top:12px"><div class="lab"><span class="kicker">Instagram, 6:00pm</span><button type="button" class="copy" data-for="ig">Copy</button></div><p id="ig-text"></p></div></div>'+
+      '<div class="tomorrow"><span id="tomorrow"></span><a href="'+esc(c.plan_url)+'">The whole plan, with every Why &rarr;</a></div></section>';
+    h += '<div class="doors">';
+    (c.doors||[]).forEach(function(d,i){
+      h += '<section class="door '+(i===0?'a':'b')+'"><div class="kicker">'+esc(d.kicker)+'</div><h2>'+d.h+'</h2><p class="law">'+esc(d.law)+'</p><ul class="links">';
+      (d.links||[]).forEach(function(l){ h += '<li><a href="'+esc(l.href)+'"><span><span class="t">'+esc(l.t)+'</span><span class="u">'+esc(l.u)+'</span></span><span class="pill '+esc(l.pill)+'">'+esc(l.label)+'</span></a></li>'; });
+      h += '</ul><p class="foot">'+d.foot+'</p></section>';
+    });
+    h += '</div>';
+    h += '<section class="plain"><h2>The pages you rule from</h2><p class="lede">Private, behind your claude.ai login. Each one is the copy of record for what it names; the vault holds the same file.</p><ul class="desk">';
+    (c.desk||[]).forEach(function(x){ h += '<li><a class="t" href="'+esc(x.href)+'">'+esc(x.t)+'</a><p class="w">'+x.w+'</p><span class="d">'+x.d+'</span></li>'; });
+    h += '</ul></section>';
+    h += '<section class="plain"><h2>Where the files live</h2><p class="lede">Your rewrite of any line is final, and these are the places it lands.</p><dl class="files">';
+    (c.files||[]).forEach(function(f){ h += '<dt>'+esc(f.dt)+'</dt><dd>'+f.dd+'</dd>'; });
+    h += '</dl></section>';
+    app.innerHTML = h;
+    status.className = 'status'; status.textContent = note || ('Content from the vault, updated '+(c.generated_at||'').replace('T',' ').slice(0,16)+' UTC.');
+    function paint(){
+      var k = cards[idx]; if(!k) return;
+      var rel = idx===todayIdx ? 'Today, ' : (idx<todayIdx ? 'Posted, ' : 'Coming, ');
+      var d = new Date(DAY0.getTime()+idx*86400000);
+      $('today-kicker').textContent = rel+'Day '+k.day+' of '+cards.length+', '+fmt(d);
+      $('today-frame').textContent = k.frame; $('x-text').textContent = k.x;
+      $('m-photo').textContent = k.photo; $('m-plat').textContent = k.platforms; $('m-alt').textContent = k.alt;
+      var ig = $('ig-box'); if (k.ig){ ig.hidden=false; $('ig-text').textContent=k.ig; } else { ig.hidden=true; }
+      var n = cards[idx+1];
+      $('tomorrow').textContent = n ? ('Tomorrow: Day '+n.day+', '+n.frame+', photo '+String(n.photo).split(' (')[0]+'.') : 'Day 14: ten minutes on Sunday and three numbers to homebase.';
+      $('prev').disabled = idx===0; $('next').disabled = idx===cards.length-1;
+    }
+    $('prev').onclick=function(){ if(idx>0){idx--;paint();} };
+    $('next').onclick=function(){ if(idx<cards.length-1){idx++;paint();} };
+    $('reset').onclick=function(){ idx=Math.min(Math.max(todayIdx,0),cards.length-1); paint(); };
+    var toast=$('toast'), tt;
+    app.querySelectorAll('.copy').forEach(function(b){
+      b.onclick=function(){
+        var k=cards[idx]; var text = b.getAttribute('data-for')==='x' ? k.x : k.ig;
+        var done=function(){ b.textContent='Copied'; b.setAttribute('data-done','1'); toast.classList.add('on'); clearTimeout(tt); tt=setTimeout(function(){toast.classList.remove('on'); b.textContent='Copy'; b.removeAttribute('data-done');},1400); };
+        var fallback=function(){ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); };
+        if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ fallback(); done(); }); } else { fallback(); done(); }
+      };
+    });
+    paint();
+  }
+
+  function load(fresh){
+    var t = token();
+    if (!t) { pairing(); return; }
+    var cached = cacheGet();
+    if (cached && !fresh) render(cached, 'Loading the latest from the vault.');
+    else if (!cached) { status.className='status'; status.textContent='Loading.'; }
+    fetch(API, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ token: t, op: 'hub' }) })
+      .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, status: r.status, d: d }; }); })
+      .then(function(x){
+        if (x.status === 403) { try{ localStorage.removeItem('eddy_token'); }catch(e){} pairing('That token was not accepted. Paste the device token from the Harbor.'); return; }
+        if (!x.ok || !x.d || !x.d.content) { status.className='status err'; status.textContent = 'Could not load: '+((x.d&&x.d.error)||('HTTP '+x.status))+(cached?' (showing the last copy).':''); if(!cached) app.innerHTML=''; return; }
+        cacheSet(x.d.content); render(x.d.content);
+      })
+      .catch(function(e){ status.className='status err'; status.textContent = 'Offline: '+(cached?'showing the last copy.':'nothing cached yet.'); });
+  }
+  load(false);
+})();
+</script>
+</body>
+</html>
