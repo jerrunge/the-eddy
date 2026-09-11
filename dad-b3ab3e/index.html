@@ -197,9 +197,9 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
     var h = '';
     h += '<section class="today" aria-labelledby="today-h"><div class="head"><h2 id="today-h"><small id="today-kicker"></small><span id="today-frame"></span></h2>'+
       '<div class="nav"><button type="button" id="prev">&larr; prev</button><button type="button" id="next">next &rarr;</button><button type="button" id="reset">today</button></div></div>'+
-      '<div class="post"><div class="lab"><span class="kicker" id="x-lab">X and Bluesky, 7:30am</span><button type="button" class="copy" data-for="x">Copy</button></div><p id="x-text"></p></div>'+
+      '<div class="post"><div class="lab"><span class="kicker" id="x-lab"></span><button type="button" class="copy" data-for="x">Copy</button></div><p id="x-text"></p></div>'+
       '<div><dl class="meta"><dt>Photo</dt><dd id="m-photo"></dd><dt>Where</dt><dd id="m-plat"></dd><dt>Alt</dt><dd class="q" id="m-alt"></dd></dl>'+
-      '<div class="post" id="ig-box" style="margin-top:12px"><div class="lab"><span class="kicker">Instagram, 6:00pm</span><button type="button" class="copy" data-for="ig">Copy</button></div><p id="ig-text"></p></div></div>'+
+      '<div class="post" id="ig-box" style="margin-top:12px"><div class="lab"><span class="kicker" id="ig-lab"></span><button type="button" class="copy" data-for="ig">Copy</button></div><p id="ig-text"></p></div></div>'+
       '<div class="tomorrow"><span id="tomorrow"></span><a href="'+esc(c.plan_url)+'">The whole plan, with every Why &rarr;</a></div></section>';
     h += '<div class="doors">';
     (c.doors||[]).forEach(function(d,i){
@@ -222,7 +222,7 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
       var d = new Date(DAY0.getTime()+idx*86400000);
       $('today-kicker').textContent = rel+'Day '+k.day+' of '+cards.length+', '+fmt(d);
       $('today-frame').textContent = k.frame; $('x-text').textContent = k.x;
-      $('m-photo').textContent = k.photo; $('m-plat').textContent = k.platforms; $('m-alt').textContent = k.alt;
+      $('m-photo').textContent = k.photo; $('m-plat').textContent = k.platforms; $('m-alt').textContent = k.alt; $('x-lab').textContent = c.x_label||''; $('ig-lab').textContent = c.ig_label||'';
       var ig = $('ig-box'); if (k.ig){ ig.hidden=false; $('ig-text').textContent=k.ig; } else { ig.hidden=true; }
       var n = cards[idx+1];
       $('tomorrow').textContent = n ? ('Tomorrow: Day '+n.day+', '+n.frame+', photo '+String(n.photo).split(' (')[0]+'.') : 'Day 14: ten minutes on Sunday and three numbers to homebase.';
