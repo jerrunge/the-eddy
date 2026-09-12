@@ -158,8 +158,8 @@ function copyPaths(post: any): string[] {
 // ----- composition -----
 type Card = any;
 async function contentCards(sb: any, today: string, hubCards: Map<number, any>, withText: boolean, onlyIds?: string[]) {
-  let q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, updated_at").eq("user_id", USER).not("status", "in", "(published,archived)").not("scheduled_for", "is", null).lte("scheduled_for", today).order("scheduled_for");
-  if (onlyIds && onlyIds.length) q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, updated_at").in("id", onlyIds);
+  let q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").eq("user_id", USER).not("status", "in", "(published,archived)").not("scheduled_for", "is", null).lte("scheduled_for", today).order("scheduled_for");
+  if (onlyIds && onlyIds.length) q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").in("id", onlyIds);
   const rows = (await q).data ?? [];
   const groups = new Map<string, any[]>();
   for (const r of rows) { const k = groupKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(r); }
