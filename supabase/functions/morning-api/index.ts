@@ -109,9 +109,25 @@ function photoUrl(path: string) { return isVaultImage(path) ? API_URL() + "?op=p
 const IMAGE_TYPE: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
 
 // ----- the vault (copy for the cards) -----
+// The GitHub token: the MORNING_GH_TOKEN secret when set, else the eddy_config row
+// morning_gh_token (RLS-sealed, service role only; the same table the face reads its
+// Linear and Hevy keys from). His word, 2026-09-12: use the token already on his machine.
+let ghCache: { at: number; token: string } | null = null;
+async function ghToken(): Promise<string> {
+  const env = Deno.env.get("MORNING_GH_TOKEN") || "";
+  if (env) return env;
+  if (ghCache && Date.now() - ghCache.at < 5 * 60000) return ghCache.token;
+  try {
+    const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const r = await sb.from("eddy_config").select("value").eq("key", "morning_gh_token").maybeSingle();
+    const token = String(r.data?.value || "");
+    ghCache = { at: Date.now(), token };
+    return token;
+  } catch { return ""; }
+}
 const textCache = new Map<string, { at: number; text: string | null }>();
 async function vaultText(path: string): Promise<string | null> {
-  const token = Deno.env.get("MORNING_GH_TOKEN") || "";
+  const token = await ghToken();
   if (!token || !path) return null;
   const hit = textCache.get(path);
   if (hit && Date.now() - hit.at < CACHE_MIN * 60000) return hit.text;
@@ -293,7 +309,7 @@ Deno.serve(async (req: Request) => {
     if (!okTok) return j({ error: "bad token" }, headers, 403);
     const path = u.searchParams.get("path") || "";
     if (!isVaultImage(path)) return j({ error: "not a vault image" }, headers, 400);
-    const gh = Deno.env.get("MORNING_GH_TOKEN") || "";
+    const gh = await ghToken();
     if (!gh) return j({ error: "MORNING_GH_TOKEN not set" }, headers, 503);
     const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, { headers: { authorization: "Bearer " + gh, "user-agent": "morning-api", accept: "application/vnd.github.raw+json" } });
     if (!r.ok) return j({ error: "vault " + r.status }, headers, r.status === 404 ? 404 : 502);
@@ -430,7 +446,7 @@ Deno.serve(async (req: Request) => {
         week.push({ date: day, dow: DOW[wdi], count: (i === 0 ? sitting.filter((c) => c.status === "open").length : titles.length + rts.length), posts: titles.length, routines: rts.length, label: label ? label.slice(0, 48) : null });
       }
 
-      return j({ date: today, nice_date: niceDate(today), now: ptNow(), sitting, behind, doors, week, routines_seeded: routines.length, text_ready: !!Deno.env.get("MORNING_GH_TOKEN"), served_at: now }, headers);
+      return j({ date: today, nice_date: niceDate(today), now: ptNow(), sitting, behind, doors, week, routines_seeded: routines.length, text_ready: !!(await ghToken()), served_at: now }, headers);
     }
 
     if (body.op === "text") {
@@ -451,7 +467,7 @@ Deno.serve(async (req: Request) => {
         if (seen.has(key)) { seen.get(key).platforms.push(p.platform); seen.get(key).label += " and " + label; }
         else { const c = { label, platforms: [p.platform], text: key }; seen.set(key, c); copy.push(c); }
       }
-      return j({ ok: true, copy, text_ready: !!Deno.env.get("MORNING_GH_TOKEN") }, headers);
+      return j({ ok: true, copy, text_ready: !!(await ghToken()) }, headers);
     }
 
     if (body.op === "tap") {
@@ -547,7 +563,7 @@ Deno.serve(async (req: Request) => {
 // recorded, the option label is the lane's proposal and is never quoted as his words, and anything
 // he typed is quoted verbatim. Same-day tap rulings share one heading.
 async function writeRuling(r: any, opt: any, typed: string, today: string): Promise<string | null> {
-  const token = Deno.env.get("MORNING_GH_TOKEN") || "";
+  const token = await ghToken();
   if (!token) throw new Error("MORNING_GH_TOKEN not set; the row is answered, RULINGS.md waits");
   const api = `https://api.github.com/repos/${REPO}/contents/RULINGS.md`;
   const gh = { authorization: "Bearer " + token, "user-agent": "morning-api", accept: "application/vnd.github+json" };
