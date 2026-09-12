@@ -9,6 +9,10 @@
 //   morning  { date? }                          -> { date, sitting:[card], behind:[group], doors:[door], week:[day], routines_seeded, served_at }
 //   tap      { card_id, action, post_id?, post_ids?, url?, value?, choice?, text?, source? } -> { ok, card }
 //   text     { card_id, post_id? }              -> { ok, copy:[...] }   copy for a card the composition left thin
+//   GET ?op=photo&path=<vault path>  (token as Bearer, x-device-token, or ?token=) -> the image bytes
+//
+// door.pill.state is ok | wait | quiet (the contract the two renderers share); card.photo carries
+// path, alt, and url (null when the photo lives outside the vault, e.g. the iCloud frames).
 //
 // A card: { id, source: content|routine|ruling, time, door, what, why, copy:[{label, platforms, text}],
 //           photo:{path, alt}|null, kit:{to, from, when, how}|null, taps:[{action, label, post_id?}],
@@ -96,6 +100,13 @@ function tapLabel(platform: string, format: string) {
   return "Done";
 }
 function esc(s: any) { return String(s == null ? "" : s); }
+// A photo the phone can load: only a file in the vault has one (the Way of Dad frames live in
+// iCloud and carry a name only). The face loads it with the device token as a bearer header,
+// or as ?token= for an image view that cannot set headers.
+const API_URL = () => (Deno.env.get("SUPABASE_URL") || "") + "/functions/v1/morning-api";
+function isVaultImage(path: string) { return /^docs\/[^\s]+\.(png|jpe?g|gif|webp)$/i.test(path); }
+function photoUrl(path: string) { return isVaultImage(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null; }
+const IMAGE_TYPE: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
 
 // ----- the vault (copy for the cards) -----
 const textCache = new Map<string, { at: number; text: string | null }>();
@@ -166,7 +177,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
       }
     }
     const photoPath = m.image || m.frame || (hub ? hub.photo : null) || null;
-    const photo = photoPath ? { path: String(photoPath), alt: (hub ? hub.alt : null) || m.alt || null } : null;
+    const photo = photoPath ? { path: String(photoPath), alt: (hub ? hub.alt : null) || m.alt || null, url: photoUrl(String(photoPath)) } : null;
     const kit = (m.send_to || m.account || m.slot || m.send_note) ? { to: m.send_to || null, from: m.account || null, when: m.slot || null, how: m.send_note || null } : null;
     const taps: any[] = [];
     const allLabel = tapLabel(lead.platform, lead.format);
@@ -270,6 +281,24 @@ async function liveChecks(sb: any) {
 Deno.serve(async (req: Request) => {
   const headers = headersFor(req.headers.get("origin"));
   if (req.method === "OPTIONS") return new Response("ok", { headers });
+  if (req.method === "GET") {
+    const u = new URL(req.url);
+    if (u.searchParams.get("op") !== "photo") return j({ error: "POST, or GET ?op=photo" }, headers, 405);
+    const given = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "") || req.headers.get("x-device-token") || u.searchParams.get("token") || "";
+    const hashesG = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const acceptedG = hashesG.length ? hashesG : FACE_HASHES;
+    const serviceG = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const okTok = !!given && (acceptedG.includes(await sha256hex(given)) || (given === serviceG) || (given.length > 20 && await serviceProbe(given)));
+    if (!okTok) return j({ error: "bad token" }, headers, 403);
+    const path = u.searchParams.get("path") || "";
+    if (!isVaultImage(path)) return j({ error: "not a vault image" }, headers, 400);
+    const gh = Deno.env.get("MORNING_GH_TOKEN") || "";
+    if (!gh) return j({ error: "MORNING_GH_TOKEN not set" }, headers, 503);
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, { headers: { authorization: "Bearer " + gh, "user-agent": "morning-api", accept: "application/vnd.github.raw+json" } });
+    if (!r.ok) return j({ error: "vault " + r.status }, headers, r.status === 404 ? 404 : 502);
+    const ext = path.split(".").pop()!.toLowerCase();
+    return new Response(r.body, { status: 200, headers: { "Access-Control-Allow-Origin": headers["Access-Control-Allow-Origin"], "Content-Type": IMAGE_TYPE[ext] || "application/octet-stream", "Cache-Control": "private, max-age=3600" } });
+  }
   if (req.method !== "POST") return j({ error: "POST only" }, headers, 405);
   let body: any;
   try { body = await req.json(); } catch { return j({ error: "bad json" }, headers, 400); }
@@ -336,7 +365,7 @@ Deno.serve(async (req: Request) => {
         const nextRow = ahead.find((r: any) => doorOf(r) === id);
         const undatedCount = undated.filter((r: any) => doorOf(r) === id).length;
         const openHere = sitting.filter((c) => c.door === id && c.status === "open").length;
-        const d: any = { id, name: DOORS[id], pill: { state: site ? (site.ok ? "live" : "down") : "unknown", label: site ? (site.ok ? "site live" : "site " + site.status) : "unchecked", url: site?.url || null }, next: null, numbers: [], quiet: null, links: [], today: openHere };
+        const d: any = { id, name: DOORS[id], pill: { state: site && site.ok ? "ok" : "wait", label: site ? (site.ok ? "site live" : "site " + site.status) : "unchecked", url: site?.url || null }, next: null, numbers: [], quiet: null, links: [], today: openHere };
         if (id === "wayofdad") {
           const day0 = hubContent?.day0 || null;
           const dayN = day0 ? Math.round((new Date(today + "T12:00:00Z").getTime() - new Date(day0 + "T12:00:00Z").getTime()) / 86400000) : null;
@@ -344,7 +373,7 @@ Deno.serve(async (req: Request) => {
           if (live?.bluesky?.at) {
             const postedDay = new Date(live.bluesky.at).toLocaleDateString("en-CA", { timeZone: TZ });
             const postedTime = new Date(live.bluesky.at).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).toLowerCase().replace(" ", "");
-            d.pill = { state: "live", label: postedDay === today ? "posted " + postedTime : "last post " + niceDate(postedDay), url: "https://bsky.app/profile/wayofdad.co" };
+            d.pill = { state: postedDay === today ? "ok" : "wait", label: postedDay === today ? "posted " + postedTime : "last post " + niceDate(postedDay), url: "https://bsky.app/profile/wayofdad.co" };
           }
           if (dayN != null) d.numbers.push({ label: "day", value: dayN + " of " + total });
           const dmMark = todaysRoutines.find((r: any) => /dm/i.test(r.what)); const dm = dmMark ? marks.get(dmMark.id) : null;
@@ -382,6 +411,7 @@ Deno.serve(async (req: Request) => {
           if (!openHere && !nextRow) d.quiet = "Nothing dated for the house today.";
           d.links.push({ label: "RULINGS.md", href: "https://github.com/" + REPO + "/blob/main/RULINGS.md" }, { label: "NOW.md", href: "https://github.com/" + REPO + "/blob/main/NOW.md" });
         }
+        if (d.quiet) d.pill.state = "quiet";
         return d;
       });
 
