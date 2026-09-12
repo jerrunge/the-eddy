@@ -293,86 +293,155 @@ Deno.serve(async (req: Request) => {
       if (out.read) await stateSet(`read:${today}`, out.read);
       return j({ ok: true, counsel: out, cached: false }, headers);
     }
-    if (body.op === "word" || body.op === "plan") {
-      const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-      if (!apiKey) return j({ error: "ANTHROPIC_API_KEY not set" }, headers, 500);
-      const text = String(body.text ?? "").slice(0, 4000);
-      const boxes = await sb.from("desk_boxes").select("id, title, why, deadline").eq("archived", false).order("position");
-      const boxList = (boxes.data ?? []).map((b: any) => `${b.id} | ${b.title}${b.deadline ? " (by " + b.deadline + ")" : ""}`).join("\n");
-      const system = [
-        `You organize work for Jeremy Runge inside his own app. He is an adult expert in his own life; you never scold, cap, or assess him. Plain words. Never use an em dash.`,
-        `He types one sentence about something on his mind. Decide what it is and return ONLY JSON, no prose:`,
-        `{"kind":"routine"|"work"|"linear"|"note"|"person"|"rating"|"keystone"|"rung", "title": string, "why": string,`,
-        ` "routine": {"cadence":"daily"|"weekly"|"as_needed","anchor":"wake"|"levo_gap_closed"|"meal_start"|"fork_down"|"dip_clear"|"gym_leave"|"wind_down"|"lights_down"|"close","kind":"self"|"body"|"food"|"meds"|"mind"|"home"|"work"} (only when kind is routine),`,
-        ` "box": {"use_existing_id": string|null, "title": string, "why": string, "deadline": "YYYY-MM-DD"|null} (only when kind is work),`,
-        ` "items": [{"text": string, "detail": string|null, "due": "YYYY-MM-DD"|null, "minutes": number, "steps": [string]}] (only when kind is work: 3 to 10 items in doing order, each one focused sprint of 15 to 45 minutes; a big item gets 2 to 6 steps under it; every step is one physical action; nothing vague),`,
-        ` "linear": {"title": string, "detail": string|null, "due": "YYYY-MM-DD"|null, "priority": 1|2|3|4} (only when kind is linear: a single professional to-do that belongs in his Linear, not a project),`,
-        ` "person": {"name": string, "note": string} (only when kind is person: something about a person in his life to remember or a contact to log),`,
-        ` "rating": {"domain": "PH"|"ME"|"CG"|"SX"|"RL"|"SC"|"FI"|"EN"|"SP"|"ID", "rating": 0..10, "words": string} (only when kind is rating: he rates a Fortify domain of his life, like "physical is a 4 today, short nights"),`,
-        ` "keystone": {"line": "FI·ID"|"PH·SX"|"PH·ME"|"SX·RL"|"FI·ME"|"SC·ME"|"SP·ID"|"CG·PH", "sentence": string} (only when kind is keystone: he names the pair he is working, in his words),`,
-        ` "rung": {"level": "full"|"reduced"|"floor", "why": string} (only when kind is rung: he declares the dose of the day, like "reduced today, slept five hours"),`,
-        ` "questions": [string] (0 to 3 things you need from him to organize it better)}`,
-        `Anchors mean: wake (first thing), levo_gap_closed (about 45 minutes after waking, after the thyroid pill), meal_start (with lunch), fork_down (after lunch), dip_clear (mid afternoon), gym_leave (after training), wind_down (evening), lights_down (bed), close (end of day sweep).`,
-        `If the sentence names a multi-week job (a move, a launch, a book, a sale), kind is work and the items are the days of it, in order, each a bounded sprint list. If it is one professional task, kind is linear. If it is a daily habit or a medical protocol, kind is routine. If it is about a person, kind is person. If it rates a domain of his life, kind is rating. If it names the keystone pair he is working, kind is keystone. If it declares the day's dose, kind is rung. If it is only a thought to keep, kind is note.`,
-        `Existing boxes (id | title), reuse one when the sentence clearly belongs to it:\n${boxList}`,
-        `Today is ${today}.`,
-      ].join("\n");
-      const raw = await ask(apiKey, system, text);
-      const plan = parseJson(raw);
-      const did: any = { kind: plan.kind, title: plan.title, why: plan.why, questions: plan.questions ?? [] };
-      if (plan.kind === "routine") {
-        const r = plan.routine ?? {}; const anchor = r.anchor ?? "wake";
-        const ins = await sb.from("checklist_templates").insert({ user_id: USER, type: TYPE_FOR_ANCHOR[anchor] ?? "morning", title: String(plan.title).slice(0, 160), kind: r.kind ?? "self", cadence: r.cadence ?? "daily", anchor, sort_order: 999, why: plan.why ?? null, senior: false, may_knock: false, rungs_authored: false, paused: false }).select("id").single();
-        if (ins.error) return j({ error: ins.error.message }, headers, 500);
-        did.routine_id = ins.data?.id;
-      } else if (plan.kind === "rating" && plan.rating) {
-        const rt = plan.rating; const rating = Number(rt.rating);
-        if (rating >= 0 && rating <= 10 && /^[A-Z]{2}$/.test(String(rt.domain))) { await sb.from("face_map_ratings").insert({ user_id: USER, domain: rt.domain, rating, words: rt.words ? String(rt.words).slice(0, 600) : text.slice(0, 600) }); did.domain = rt.domain; did.rating = rating; }
-      } else if (plan.kind === "keystone" && plan.keystone) {
-        await stateSet("keystone", { line: plan.keystone.line, sentence: plan.keystone.sentence ?? text, set_at: now });
-      } else if (plan.kind === "rung" && plan.rung) {
-        await stateSet(`rung:${today}`, { level: plan.rung.level, why: plan.rung.why ?? text, date: today, set_at: now });
-      } else if (plan.kind === "linear" && cfg.linear_api_key) {
-        const l = plan.linear ?? {};
-        const teams = await linearQuery(cfg.linear_api_key, `query { viewer { id teams { nodes { id key name } } } }`);
-        const team = (teams.viewer?.teams?.nodes ?? []).find((t: any) => /jer/i.test(t.key) || /jer/i.test(t.name)) ?? teams.viewer?.teams?.nodes?.[0];
-        const r = await linearQuery(cfg.linear_api_key, `mutation($teamId: String!, $title: String!, $desc: String, $assignee: String, $due: TimelessDate, $priority: Int) { issueCreate(input: { teamId: $teamId, title: $title, description: $desc, assigneeId: $assignee, dueDate: $due, priority: $priority }) { success issue { id identifier url } } }`, { teamId: team.id, title: String(l.title ?? plan.title).slice(0, 200), desc: l.detail ?? plan.why ?? null, assignee: teams.viewer.id, due: l.due ?? null, priority: l.priority ?? 3 });
-        did.issue = r.issueCreate?.issue;
-      } else if (plan.kind === "person") {
-        const p = plan.person ?? {}; const name = String(p.name ?? plan.title).slice(0, 120);
-        const found = await sb.from("people").select("id, notes").ilike("name", `%${name.split(" ")[0]}%`).limit(1);
-        if (found.data?.[0]) { await sb.from("people").update({ notes: [found.data[0].notes, `${today}: ${p.note ?? text}`].filter(Boolean).join("\n"), updated_at: now }).eq("id", found.data[0].id); did.person_id = found.data[0].id; }
-        else { const ins = await sb.from("people").insert({ user_id: USER, name, category: "friend", cadence: "monthly", notes: `${today}: ${p.note ?? text}`, status: "active", source: "face" }).select("id").single(); did.person_id = ins.data?.id; }
-      } else if (plan.kind === "work") {
-        const b = plan.box ?? {};
-        let boxId = b.use_existing_id && (boxes.data ?? []).some((x: any) => x.id === b.use_existing_id) ? b.use_existing_id : null;
-        if (!boxId) {
-          boxId = crypto.randomUUID();
-          await sb.from("desk_boxes").insert({ id: boxId, title: String(b.title ?? plan.title).slice(0, 120), why: b.why ?? plan.why ?? null, deadline: b.deadline ?? null, hue: "harbor", position: 0 });
-        }
-        const existing = await sb.from("desk_items").select("position").eq("box_id", boxId).is("parent_item_id", null).order("position", { ascending: false }).limit(1);
-        let pos = (existing.data?.[0]?.position ?? 0) + 1;
-        const made: any[] = [];
-        for (const it of (plan.items ?? []).slice(0, 12)) {
-          const id = crypto.randomUUID();
-          const detail = [it.detail, it.minutes ? `${it.minutes} min sprint` : null].filter(Boolean).join(" · ");
-          await sb.from("desk_items").insert({ id, box_id: boxId, kind: "task", text: String(it.text).slice(0, 500), detail: detail || null, due: it.due ?? null, position: pos++, source: "face" });
-          let sp = 1;
-          for (const s of (it.steps ?? []).slice(0, 8)) await sb.from("desk_items").insert({ id: crypto.randomUUID(), box_id: boxId, parent_item_id: id, kind: "task", text: String(s).slice(0, 500), position: sp++, source: "face" });
-          made.push({ id, text: it.text, steps: (it.steps ?? []).length });
-        }
-        if ((plan.questions ?? []).length) await sb.from("desk_items").insert({ id: crypto.randomUUID(), box_id: boxId, kind: "note", text: "Questions from the plan", body: (plan.questions as string[]).map((q) => "- " + q).join("\n"), position: pos++, source: "face" });
-        await sb.from("desk_log").insert({ actor: "face", summary: `Planned from his word: ${String(plan.title).slice(0, 120)} (${made.length} items)` });
-        did.box_id = boxId; did.items = made;
+    // ---- Say it (v7, 2026-09-12). His words are stored first (face_words), then organized.
+    // A list is many things. A composer failure answers 200 with kept true and the plain reason,
+    // never a 500, and the row waits for word_retry. Only a failure to store answers 500.
+    if (body.op === "words") {
+      const lim = Math.min(Number(body.limit ?? 12) || 12, 50);
+      const r = await sb.from("face_words").select("id, text, source, said_at, status, error, did").eq("user_id", USER).order("said_at", { ascending: false }).limit(lim);
+      return j({ ok: true, words: r.data ?? [] }, headers);
+    }
+    if (body.op === "word" || body.op === "plan" || body.op === "word_retry") {
+      let wordId = ""; let text = ""; let source = String(body.source ?? "face").slice(0, 24);
+      if (body.op === "word_retry") {
+        const row = await sb.from("face_words").select("id, text, source").eq("id", String(body.word_id ?? "")).maybeSingle();
+        if (row.error || !row.data) return j({ error: "no such word" }, headers, 404);
+        wordId = row.data.id; text = row.data.text; source = row.data.source ?? source;
+        await sb.from("face_words").update({ status: "kept", error: null, updated_at: now }).eq("id", wordId);
       } else {
-        const inbox = (boxes.data ?? []).find((x: any) => /work/i.test(x.title)) ?? (boxes.data ?? [])[0];
-        if (inbox) await sb.from("desk_items").insert({ id: crypto.randomUUID(), box_id: inbox.id, kind: "note", text: String(plan.title).slice(0, 500), body: text, position: 999, source: "face" });
-        did.box_id = inbox?.id ?? null;
+        text = String(body.text ?? "").slice(0, 8000);
+        if (!text.trim()) return j({ error: "nothing said" }, headers, 400);
+        const ins = await sb.from("face_words").insert({ user_id: USER, text, source, said_at: now, status: "kept" }).select("id").single();
+        if (ins.error || !ins.data) return j({ error: "could not keep the words: " + (ins.error?.message ?? "no row") }, headers, 500);
+        wordId = ins.data.id;
       }
-      return j({ ok: true, did }, headers);
+      try {
+        const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+        if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set on the function");
+        const boxes = await sb.from("desk_boxes").select("id, title, why, deadline").eq("archived", false).order("position");
+        const boxList = (boxes.data ?? []).map((b: any) => `${b.id} | ${b.title}${b.deadline ? " (by " + b.deadline + ")" : ""}`).join("\n");
+        const projs = await sb.from("projects").select("id, title, due_ymd").eq("status", "open");
+        const projList = (projs.data ?? []).map((p: any) => `${p.id} | ${p.title}${p.due_ymd ? " (by " + p.due_ymd + ")" : ""}`).join("\n");
+        const weekday = new Date(today + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+        const system = [
+          `You organize what Jeremy Runge says inside his own app. He is an adult expert in his own life; you never scold, cap, or assess him. Plain words. Never use an em dash. Never invent a fact he did not give (no names, no amounts, no dates he did not say); when a thing needs his data, say so in its detail.`,
+          `He types one sentence or a whole list. Split it into its things and return ONLY JSON, no prose:`,
+          `{"summary": string (one line naming what he said, in plain words), "things": [thing, ...], "questions": [string] (0 to 3 things you need from him)}`,
+          `Each thing is {"kind":"work"|"project"|"routine"|"linear"|"note"|"person"|"rating"|"keystone"|"rung", "title": string, "why": string, ...kind fields}. One line of his list is one thing; a plain to-do with a date is kind work with one item.`,
+          ` work: "box": {"use_existing_id": string|null, "title": string, "why": string, "deadline": "YYYY-MM-DD"|null}, "items": [{"text": string, "detail": string|null, "due": "YYYY-MM-DD"|null, "minutes": number|null, "steps": [string]}] (1 to 10 items in doing order; a big item gets 2 to 6 steps, each one physical action; a single to-do is one item with its due date; reuse an existing box when the thing clearly belongs to it).`,
+          ` project: "project": {"use_existing_id": string|null, "title": string, "due": "YYYY-MM-DD"|null, "moves": [{"title": string, "why": string, "target": "YYYY-MM-DD"|null}]} (a multi-week job with an end date: a move, a launch, a book; the moves are its stages in order, 1 to 12; when he asks for a plan he has not given, make the first move the making of the plan, never a fabricated schedule).`,
+          ` routine: "routine": {"cadence":"daily"|"weekly"|"as_needed","anchor":"wake"|"levo_gap_closed"|"meal_start"|"fork_down"|"dip_clear"|"gym_leave"|"wind_down"|"lights_down"|"close","kind":"self"|"body"|"food"|"meds"|"mind"|"home"|"work"} (a daily habit or a medical protocol).`,
+          ` linear: "linear": {"title": string, "detail": string|null, "due": "YYYY-MM-DD"|null, "priority": 1|2|3|4} (one professional to-do that belongs in his Linear).`,
+          ` person: "person": {"name": string, "note": string} (something about a person in his life to remember, or a contact to log; a to-do that names a person is still work, not person).`,
+          ` rating: "rating": {"domain": "PH"|"ME"|"CG"|"SX"|"RL"|"SC"|"FI"|"EN"|"SP"|"ID", "rating": 0..10, "words": string} (he rates a Fortify domain, like "physical is a 4 today, short nights").`,
+          ` keystone: "keystone": {"line": "FI·ID"|"PH·SX"|"PH·ME"|"SX·RL"|"FI·ME"|"SC·ME"|"SP·ID"|"CG·PH", "sentence": string} (he names the pair he is working).`,
+          ` rung: "rung": {"level": "full"|"reduced"|"floor", "why": string} (he declares the dose of the day, like "reduced today, slept five hours").`,
+          ` note: only a thought to keep; nothing else fits.`,
+          `Anchors mean: wake (first thing), levo_gap_closed (about 45 minutes after waking, after the thyroid pill), meal_start (with lunch), fork_down (after lunch), dip_clear (mid afternoon), gym_leave (after training), wind_down (evening), lights_down (bed), close (end of day sweep).`,
+          `Dates: resolve "today", "tomorrow", "Monday morning", "by the 30th" against today; "by Monday morning" is that Monday's date. Never guess a date he did not imply.`,
+          `Existing boxes (id | title), reuse one when the thing clearly belongs to it:\n${boxList}`,
+          `Open projects (id | title), reuse one when the thing clearly belongs to it:\n${projList || "(none)"}`,
+          `Today is ${today} (${weekday}).`,
+        ].join("\n");
+        let raw = await ask(apiKey, system, text, 4000);
+        let plan: any;
+        try { plan = parseJson(raw); } catch {
+          raw = await ask(apiKey, system + "\nReturn ONLY the JSON object, complete, nothing else.", text, 6000);
+          plan = parseJson(raw);
+        }
+        const thingsIn: any[] = Array.isArray(plan.things) ? plan.things : (plan.kind ? [plan] : []);
+        if (!thingsIn.length) throw new Error("the composer returned no things");
+        const things: any[] = []; const madeAll: any[] = [];
+        const boxTitle = (id: string | null) => (boxes.data ?? []).find((x: any) => x.id === id)?.title ?? null;
+        for (const t of thingsIn.slice(0, 20)) {
+          const out: any = { kind: t.kind, title: String(t.title ?? "").slice(0, 200), why: t.why ?? null, where: null, box_id: null, due: null, routine_id: null, person_id: null, project_id: null, item_ids: [], issue: null };
+          if (t.kind === "routine") {
+            const r = t.routine ?? {}; const anchor = r.anchor ?? "wake";
+            const ins = await sb.from("checklist_templates").insert({ user_id: USER, type: TYPE_FOR_ANCHOR[anchor] ?? "morning", title: out.title.slice(0, 160), kind: r.kind ?? "self", cadence: r.cadence ?? "daily", anchor, sort_order: 999, why: t.why ?? null, senior: false, may_knock: false, rungs_authored: false, paused: false }).select("id").single();
+            if (ins.error) throw new Error("routine: " + ins.error.message);
+            out.routine_id = ins.data?.id; out.where = `a ${r.cadence ?? "daily"} routine at ${anchor}`;
+          } else if (t.kind === "rating" && t.rating) {
+            const rt = t.rating; const rating = Number(rt.rating);
+            if (rating >= 0 && rating <= 10 && /^[A-Z]{2}$/.test(String(rt.domain))) { await sb.from("face_map_ratings").insert({ user_id: USER, domain: rt.domain, rating, words: rt.words ? String(rt.words).slice(0, 600) : text.slice(0, 600) }); out.domain = rt.domain; out.rating = rating; out.where = `the map, ${rt.domain} ${rating}`; }
+          } else if (t.kind === "keystone" && t.keystone) {
+            await stateSet("keystone", { line: t.keystone.line, sentence: t.keystone.sentence ?? text, set_at: now }); out.where = `the keystone, ${t.keystone.line}`;
+          } else if (t.kind === "rung" && t.rung) {
+            await stateSet(`rung:${today}`, { level: t.rung.level, why: t.rung.why ?? text, date: today, set_at: now }); out.where = `today's dose, ${t.rung.level}`;
+          } else if (t.kind === "linear" && cfg.linear_api_key) {
+            const l = t.linear ?? {};
+            const teams = await linearQuery(cfg.linear_api_key, `query { viewer { id teams { nodes { id key name } } } }`);
+            const team = (teams.viewer?.teams?.nodes ?? []).find((x: any) => /jer/i.test(x.key) || /jer/i.test(x.name)) ?? teams.viewer?.teams?.nodes?.[0];
+            const r = await linearQuery(cfg.linear_api_key, `mutation($teamId: String!, $title: String!, $desc: String, $assignee: String, $due: TimelessDate, $priority: Int) { issueCreate(input: { teamId: $teamId, title: $title, description: $desc, assigneeId: $assignee, dueDate: $due, priority: $priority }) { success issue { id identifier url } } }`, { teamId: team.id, title: String(l.title ?? t.title).slice(0, 200), desc: l.detail ?? t.why ?? null, assignee: teams.viewer.id, due: l.due ?? null, priority: l.priority ?? 3 });
+            out.issue = r.issueCreate?.issue ?? null; out.due = l.due ?? null; out.where = `Linear ${out.issue?.identifier ?? ""}`.trim();
+          } else if (t.kind === "person") {
+            const p = t.person ?? {}; const name = String(p.name ?? t.title).slice(0, 120);
+            const found = await sb.from("people").select("id, notes").ilike("name", `%${name.split(" ")[0]}%`).limit(1);
+            if (found.data?.[0]) { await sb.from("people").update({ notes: [found.data[0].notes, `${today}: ${p.note ?? text}`].filter(Boolean).join("\n"), updated_at: now }).eq("id", found.data[0].id); out.person_id = found.data[0].id; }
+            else { const ins = await sb.from("people").insert({ user_id: USER, name, category: "friend", cadence: "monthly", notes: `${today}: ${p.note ?? text}`, status: "active", source: "face" }).select("id").single(); out.person_id = ins.data?.id ?? null; }
+            out.where = `the people, ${name}`;
+          } else if (t.kind === "project") {
+            const pj = t.project ?? {};
+            let pid = pj.use_existing_id && (projs.data ?? []).some((x: any) => x.id === pj.use_existing_id) ? pj.use_existing_id : null;
+            if (pid) { if (pj.due) await sb.from("projects").update({ due_ymd: pj.due }).eq("id", pid); }
+            else {
+              const ins = await sb.from("projects").insert({ user_id: USER, title: String(pj.title ?? t.title).slice(0, 200), due_ymd: pj.due ?? null, status: "open", open_questions: plan.questions ?? [], source_word: text.slice(0, 2000) }).select("id").single();
+              if (ins.error) throw new Error("project: " + ins.error.message);
+              pid = ins.data?.id;
+            }
+            const existing = await sb.from("project_moves").select("stage").eq("project_id", pid).order("stage", { ascending: false }).limit(1);
+            let stage = (existing.data?.[0]?.stage ?? 0) + 1;
+            for (const m of (pj.moves ?? []).slice(0, 12)) {
+              const ins = await sb.from("project_moves").insert({ project_id: pid, user_id: USER, title: String(m.title).slice(0, 200), why: m.why ?? null, stage: stage++, target_ymd: m.target ?? null, status: "open" }).select("id").single();
+              if (ins.data?.id) out.item_ids.push(ins.data.id);
+            }
+            out.project_id = pid; out.due = pj.due ?? null; out.where = `the project ${String(pj.title ?? t.title).slice(0, 60)}${pj.due ? ", by " + pj.due : ""}`;
+          } else if (t.kind === "work") {
+            const b = t.box ?? {};
+            let boxId = b.use_existing_id && (boxes.data ?? []).some((x: any) => x.id === b.use_existing_id) ? b.use_existing_id : null;
+            if (!boxId) {
+              boxId = crypto.randomUUID();
+              await sb.from("desk_boxes").insert({ id: boxId, title: String(b.title ?? t.title).slice(0, 120), why: b.why ?? t.why ?? null, deadline: b.deadline ?? null, hue: "harbor", position: 0 });
+              boxes.data?.push({ id: boxId, title: String(b.title ?? t.title).slice(0, 120), why: null, deadline: b.deadline ?? null });
+            }
+            const existing = await sb.from("desk_items").select("position").eq("box_id", boxId).is("parent_item_id", null).order("position", { ascending: false }).limit(1);
+            let pos = (existing.data?.[0]?.position ?? 0) + 1;
+            const items = (t.items ?? []).length ? t.items : [{ text: t.title, detail: t.why ?? null, due: t.due ?? null }];
+            for (const it of items.slice(0, 12)) {
+              const id = crypto.randomUUID();
+              const detail = [it.detail, it.minutes ? `${it.minutes} min sprint` : null].filter(Boolean).join(" · ");
+              const ins = await sb.from("desk_items").insert({ id, box_id: boxId, kind: "task", text: String(it.text).slice(0, 500), detail: detail || null, due: it.due ?? null, position: pos++, source: "face" });
+              if (ins.error) throw new Error("item: " + ins.error.message);
+              let sp = 1;
+              for (const st of (it.steps ?? []).slice(0, 8)) await sb.from("desk_items").insert({ id: crypto.randomUUID(), box_id: boxId, parent_item_id: id, kind: "task", text: String(st).slice(0, 500), position: sp++, source: "face" });
+              out.item_ids.push(id); madeAll.push({ id, text: it.text, steps: (it.steps ?? []).length });
+              if (!out.due && it.due) out.due = it.due;
+            }
+            out.box_id = boxId; out.where = `the Harbor, ${boxTitle(boxId) ?? "a new box"}`;
+          } else {
+            const inbox = (boxes.data ?? []).find((x: any) => /work/i.test(x.title)) ?? (boxes.data ?? [])[0];
+            if (inbox) { const id = crypto.randomUUID(); await sb.from("desk_items").insert({ id, box_id: inbox.id, kind: "note", text: out.title.slice(0, 500), body: text, position: 999, source: "face" }); out.item_ids.push(id); out.box_id = inbox.id; out.where = `a note in ${inbox.title}`; }
+          }
+          things.push(out);
+        }
+        if ((plan.questions ?? []).length && things.some((x) => x.box_id)) {
+          const bx = things.find((x) => x.box_id).box_id;
+          await sb.from("desk_items").insert({ id: crypto.randomUUID(), box_id: bx, kind: "note", text: "Questions from the plan", body: (plan.questions as string[]).map((q) => "- " + q).join("\n"), position: 999, source: "face" });
+        }
+        await sb.from("desk_log").insert({ actor: "face", summary: `From his word: ${String(plan.summary ?? things[0]?.title ?? "").slice(0, 140)} (${things.length} thing${things.length === 1 ? "" : "s"}, ${madeAll.length} items)` });
+        const first = things[0];
+        const did: any = { kind: things.length === 1 ? first.kind : "list", title: String(plan.summary ?? first.title ?? "").slice(0, 200), why: things.length === 1 ? first.why : things.map((x) => x.title).join("; ").slice(0, 400), questions: plan.questions ?? [], box_id: things.find((x) => x.box_id)?.box_id ?? null, routine_id: first.routine_id, person_id: first.person_id, items: madeAll, issue: first.issue, things };
+        await sb.from("face_words").update({ status: "planned", did, error: null, planned_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", wordId);
+        return j({ ok: true, kept: true, word_id: wordId, heard: text, did }, headers);
+      } catch (e) {
+        const msg = String((e as any)?.message ?? e).slice(0, 300);
+        console.error("word failed", wordId, msg);
+        await sb.from("face_words").update({ status: "failed", error: msg, updated_at: new Date().toISOString() }).eq("id", wordId);
+        return j({ ok: false, kept: true, word_id: wordId, heard: text, error: msg }, headers);
+      }
     }
     return j({ error: "unknown op" }, headers, 400);
   } catch (e) {
+    console.error("face-api failed", body?.op, String(e).slice(0, 300));
     return j({ error: String(e).slice(0, 300) }, headers, 500);
   }
 });
