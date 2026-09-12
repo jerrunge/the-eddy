@@ -1,9 +1,11 @@
-// face-api v2: the data door for the new 29:11 face (RULINGS 2026-09-10: "built to
-// perfection... fuck all the rules... no protection or safety nets. Go.").
-// Same device token as the Eddy and the Harbor, plus the Mac that drives the build.
-// RLS-sealed tables, service role inside. No gates, no caps, no hidden counts:
-// everything his tables hold is his. v2 adds Linear, Hevy, people, the cut, the
-// search, the ventures, labs, the movement protocol, and the read with receipts.
+// face-api v4: the data door for the 29:11 face on iPhone, iPad, Mac, and Watch.
+// RULINGS 2026-09-10: "built to perfection... no protection or safety nets. Go." and
+// "Don't stop until it is A+ across the board... FULLY carry and leverage the Fortify
+// methodology... how and what to do moving forward."
+// v4 adds his own Fortify map (ratings with words), his plan from the Arsenal (GAS-measured),
+// the face's small state (his keystone, his rung, the day's counsel), the counsel op (the read,
+// the keystone, the move, the rung, and Next re-ranked, from Claude with the method in hand,
+// cached per day), Linear duplicates filtered, opportunities titled, meds returning their time.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk@0.40.1";
@@ -46,7 +48,9 @@ async function linearQuery(key: string, query: string, variables: Record<string,
 }
 async function linearOpen(key: string) {
   const d = await linearQuery(key, `query { viewer { assignedIssues(first: 100, filter: { state: { type: { nin: ["completed", "canceled"] } } }, orderBy: updatedAt) { nodes { id identifier title priority dueDate url updatedAt state { name type } project { name } labels { nodes { name } } team { id } } } } }`);
-  return (d.viewer?.assignedIssues?.nodes ?? []).map((n: any) => ({ id: n.id, key: n.identifier, title: n.title, priority: n.priority, due: n.dueDate, url: n.url, updated: n.updatedAt, state: n.state?.name, state_type: n.state?.type, project: n.project?.name ?? null, labels: (n.labels?.nodes ?? []).map((l: any) => l.name), team_id: n.team?.id }));
+  return (d.viewer?.assignedIssues?.nodes ?? [])
+    .filter((n: any) => !/duplicate/i.test(n.state?.name ?? ""))
+    .map((n: any) => ({ id: n.id, key: n.identifier, title: n.title, priority: n.priority, due: n.dueDate, url: n.url, updated: n.updatedAt, state: n.state?.name, state_type: n.state?.type, project: n.project?.name ?? null, labels: (n.labels?.nodes ?? []).map((l: any) => l.name), team_id: n.team?.id }));
 }
 async function hevyRecent(key: string) {
   const r = await fetch("https://api.hevyapp.com/v1/workouts?page=1&pageSize=10", { headers: { "api-key": key, accept: "application/json" } });
@@ -57,6 +61,12 @@ async function hevyRecent(key: string) {
     exercises: (w.exercises ?? []).map((e: any) => ({ name: e.title, sets: (e.sets ?? []).filter((s: any) => s.type !== "warmup").map((s: any) => ({ lb: s.weight_kg != null ? Math.round(s.weight_kg * 2.20462) : null, reps: s.reps, sec: s.duration_seconds })) })),
   }));
 }
+
+// The Fortify method, in hand for the counsel. The ids are the Arsenal's; the model chooses only from them.
+const FORTIFY = `FORTIFY, the method: Align. Investigate. Strengthen. Move forward. Premise: every part of a person affects every other part. Ten domains: PH Physical (sleep, movement, nutrition, recovery), ME Mental (the inner weather), CG Cognitive (attention, memory), SX Sexual (desire and function; moves with sleep, stress, attention before hormones), RL Relational (the people inside the blast radius), SC Social (the wider circle; fewer and deeper), FI Financial (the relationship with money and standing), EN Environmental (rooms, light, order, outside), SP Spiritual (what the work is for), ID Identity (who he takes himself to be).
+Keystones (pair, mechanism, protocol): FI·ID Identity Fusion (money reads as standing, the number becomes the self's scoreboard; affirm values before the decision, never after), PH·SX Depletion Cascade (overwork reaches desire through sleep, stress, attention, not a blood panel; parallel pressures, a load problem), PH·ME Mind-Body Unity (body and mind worked in the same week nearly double either alone; the paired week), SX·RL Intimacy Spillover (what travels is the withdrawal; the dyad is the unit). Named seconds: FI·ME Financial Strain (change defaults, hold function up), SC·ME Social Buffering (work the interpretation, not the calendar), SP·ID Purpose Anchor (measure purpose, act on chosen values), CG·PH Cognitive Vitality (the strongest cognitive move is a sleep move).
+The Arsenal (the only shelf of moves; choose by id): paired-week, dyad-unit, affirm-before-deciding, parallel-pressures, start-below-guideline, pair-physical-psychological, sleep-audit, cbti-referral, behavioural-activation, cyclic-sighing, hrv-biofeedback, worry-postponement, meditation-scoped, sleep-cognitive, aerobic-exec, aerobic-sexual, attention-training, pelvic-floor, sleep-real-size, treat-one-both, couple-therapy, attachment-context, work-interpretation, social-connection-health, stop-teaching-automate, work-identity-side, circadian-light, purpose-measurable, values-affirmation-writing, values-affirmation, job-crafting, concealment-assessment.
+Rungs: every routine can run at full, reduced, or floor. Short sleep or HRV well under his week means reduced; both together and severe means floor. The rung is a dose, never a verdict.`;
 
 Deno.serve(async (req: Request) => {
   const headers = cors(req.headers.get("origin"));
@@ -70,11 +80,13 @@ Deno.serve(async (req: Request) => {
   const now = new Date().toISOString();
   const cfgRows = await sb.from("eddy_config").select("key, value");
   const cfg: Record<string, string> = {}; for (const r of (cfgRows.data ?? []) as any[]) cfg[r.key] = r.value;
+  const stateGet = async (key: string) => (await sb.from("face_state").select("value, updated_at").eq("user_id", USER).eq("key", key).maybeSingle()).data;
+  const stateSet = async (key: string, value: unknown) => { await sb.from("face_state").upsert({ user_id: USER, key, value, updated_at: now }); };
   try {
     if (body.op === "board") {
       const since = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
       const soon = new Date(Date.now() + 8 * 86400000).toISOString().slice(0, 10);
-      const [dw, hs, routines, comps, meds, medlog, goals, projects, moves, boxes, items, cal, allSnaps, cut, move, labs, sched, people, thread, opps, leads, book, content, domains, bp] = await Promise.all([
+      const [dw, hs, routines, comps, meds, medlog, goals, projects, moves, boxes, items, cal, allSnaps, cut, move, labs, sched, people, thread, opps, leads, book, content, domains, bp, map, plan, state, conns] = await Promise.all([
         sb.from("daily_weight").select("date, weight_lb, body_fat_pct, muscle_lb, source").order("date"),
         sb.from("health_snapshots").select("date, weight_lb, body_fat_pct, steps, sleep_total_min, sleep_deep_min, sleep_rem_min, hrv_sdnn_ms, resting_hr, active_energy_kcal, exercise_minutes, dietary_energy_kcal, protein_g, carbs_g, fat_g, water_ml, vo2_max, extras").gte("date", since).order("date"),
         sb.from("checklist_templates").select("id, title, kind, cadence, anchor, window_start, window_end, why, rung_full, rung_reduced, rung_floor, cue, place, first_physical_motion, paused, sort_order, days").eq("user_id", USER).order("sort_order"),
@@ -94,35 +106,42 @@ Deno.serve(async (req: Request) => {
         sb.from("schedule_constraints").select("label, time_local, days_of_week, is_non_negotiable, notes"),
         sb.from("people").select("id, name, category, circle, cadence, last_contacted, motion, context, status, snoozed_until, primary_domain").neq("status", "retired").order("name"),
         sb.from("person_thread").select("person_id, alive, building, next_move, brief, brief_for").order("updated_at", { ascending: false }).limit(5),
-        sb.from("opportunities").select("id, pillar, stage, estimated_value_usd, probability, next_action, next_action_due, notes, source, person_id, updated_at").is("closed_at", null).order("updated_at", { ascending: false }),
+        sb.from("opportunities").select("id, pillar, stage, estimated_value_usd, probability, next_action, next_action_due, notes, source, person_id, updated_at, people(name)").is("closed_at", null).order("updated_at", { ascending: false }),
         sb.from("role_leads").select("id, title, company, url, fit_score, fit_bucket, fit_rationale, status, posted_at, comp_raw").not("status", "in", "(dismissed,rejected,closed)").order("fit_score", { ascending: false }).limit(12),
         sb.from("reckoning_writing").select("kind, key, title, position, updated_at").order("position"),
         sb.from("content_calendar").select("title, platform, status, scheduled_for, campaign, pillar").gte("scheduled_for", today).lte("scheduled_for", soon).order("scheduled_for"),
         sb.from("domains").select("code, name, tagline, sort_order").order("sort_order"),
         sb.from("bp_reading").select("measured_at, systolic, diastolic, pulse").order("measured_at", { ascending: false }).limit(10),
+        sb.from("face_map_ratings").select("domain, rating, words, captured_at, cycle").eq("user_id", USER).order("captured_at", { ascending: false }).limit(60),
+        sb.from("face_plan").select("id, practice_id, domains, dose, day, gas, gas_now, status, created_at").eq("user_id", USER).neq("status", "deleted").order("created_at"),
+        sb.from("face_state").select("key, value, updated_at").eq("user_id", USER),
+        sb.from("domain_connections").select("source_domain, target_domain, strength, description").order("id"),
       ]);
       const wmap = new Map<string, any>();
       for (const r of (dw.data ?? []) as any[]) if (r.weight_lb != null) wmap.set(r.date, { date: r.date, lb: Number(r.weight_lb), fat: r.body_fat_pct, src: r.source || "his hand" });
       for (const r of (allSnaps.data ?? []) as any[]) wmap.set(r.date, { date: r.date, lb: Number(r.weight_lb), fat: r.body_fat_pct, lean: r.extras?.lean_body_mass?.value ?? null, src: "scale" });
       const weights = [...wmap.values()].sort((a, b) => a.date.localeCompare(b.date));
-      // the outside world, each tolerated on its own
       const [linear, hevy] = await Promise.all([
         cfg.linear_api_key ? linearOpen(cfg.linear_api_key).catch((e) => ({ error: String(e).slice(0, 120) })) : Promise.resolve({ error: "no key" }),
         cfg.hevy_api_key ? hevyRecent(cfg.hevy_api_key).catch((e) => ({ error: String(e).slice(0, 120) })) : Promise.resolve({ error: "no key" }),
       ]);
+      const st: Record<string, unknown> = {}; for (const r of (state.data ?? []) as any[]) st[r.key] = r.value;
+      const opportunities = ((opps.data ?? []) as any[]).map((o) => ({ ...o, title: o.people?.name ?? (o.notes ? String(o.notes).split("\n")[0].slice(0, 80) : null) ?? o.source ?? o.pillar ?? "opportunity", people: undefined }));
+      const labsOut = ((labs.data ?? []) as any[]).map((l, i) => ({ ...l, id: `${i}:${l.name}` }));
       return j({
         today, weights, health: hs.data ?? [], routines: routines.data ?? [], completions: comps.data ?? [],
         medications: meds.data ?? [], med_log: medlog.data ?? [], goals: goals.data ?? [],
         projects: projects.data ?? [], moves: moves.data ?? [], boxes: boxes.data ?? [], items: items.data ?? [],
-        calendar: cal.data ?? [], cut: cut.data?.[0] ?? null, movement: move.data?.[0] ?? null, labs: labs.data ?? [], schedule: sched.data ?? [],
-        people: people.data ?? [], thread: thread.data ?? [], opportunities: opps.data ?? [], leads: leads.data ?? [], book: book.data ?? [], content: content.data ?? [], domains: domains.data ?? [], bp: bp.data ?? [],
+        calendar: cal.data ?? [], cut: cut.data?.[0] ?? null, movement: move.data?.[0] ?? null, labs: labsOut, schedule: sched.data ?? [],
+        people: people.data ?? [], thread: thread.data ?? [], opportunities, leads: leads.data ?? [], book: book.data ?? [], content: content.data ?? [], domains: domains.data ?? [], bp: bp.data ?? [],
+        map: map.data ?? [], plan: plan.data ?? [], state: { keystone: st["keystone"] ?? null, rung: st[`rung:${today}`] ?? null, counsel: st[`counsel:${today}`] ?? null }, connections: conns.data ?? [],
         linear, hevy, served_at: now,
       }, headers);
     }
     if (body.op === "mark") {
       await sb.from("checklist_completions").delete().eq("template_id", body.template_id).eq("date", today);
       await sb.from("checklist_completions").insert({ template_id: body.template_id, user_id: USER, date: today, completed_at: now, skipped: !!body.skipped });
-      return j({ ok: true }, headers);
+      return j({ ok: true, completed_at: now }, headers);
     }
     if (body.op === "unmark") {
       await sb.from("checklist_completions").delete().eq("template_id", body.template_id).eq("date", today);
@@ -151,7 +170,7 @@ Deno.serve(async (req: Request) => {
     if (body.op === "med_take") {
       await sb.from("med_log").delete().eq("date", today).eq("med_name", body.med_name);
       await sb.from("med_log").insert({ user_id: USER, date: today, med_name: String(body.med_name).slice(0, 120), taken_at: now, medication_id: body.medication_id ?? null });
-      return j({ ok: true }, headers);
+      return j({ ok: true, taken_at: now }, headers);
     }
     if (body.op === "med_untake") {
       await sb.from("med_log").delete().eq("date", today).eq("med_name", body.med_name);
@@ -172,7 +191,7 @@ Deno.serve(async (req: Request) => {
     }
     if (body.op === "goal_set") {
       const patch: any = {};
-      for (const k of ["status", "goal", "target_date", "progress_notes"]) if (k in body) patch[k] = body[k];
+      for (const k of ["status", "goal", "target_date", "progress_notes", "domain"]) if (k in body) patch[k] = body[k];
       await sb.from("goals").update(patch).eq("id", body.id);
       return j({ ok: true }, headers);
     }
@@ -182,7 +201,7 @@ Deno.serve(async (req: Request) => {
     }
     if (body.op === "person_set") {
       const patch: any = { updated_at: now };
-      for (const k of ["cadence", "circle", "category", "motion", "context", "status", "snoozed_until"]) if (k in body) patch[k] = body[k];
+      for (const k of ["cadence", "circle", "category", "motion", "context", "status", "snoozed_until", "primary_domain", "last_contacted"]) if (k in body) patch[k] = body[k];
       await sb.from("people").update(patch).eq("id", body.id);
       return j({ ok: true }, headers);
     }
@@ -197,22 +216,38 @@ Deno.serve(async (req: Request) => {
       await sb.from("opportunities").update(patch).eq("id", body.id);
       return j({ ok: true }, headers);
     }
-    if (body.op === "linear_done") {
-      if (!cfg.linear_api_key) return j({ error: "no linear key" }, headers, 500);
-      const d = await linearQuery(cfg.linear_api_key, `query($id: String!) { issue(id: $id) { id team { states { nodes { id type name } } } } }`, { id: body.id });
-      const done = (d.issue?.team?.states?.nodes ?? []).find((s: any) => s.type === "completed");
-      if (!done) return j({ error: "no completed state on the team" }, headers, 500);
-      await linearQuery(cfg.linear_api_key, `mutation($id: String!, $state: String!) { issueUpdate(id: $id, input: { stateId: $state }) { success } }`, { id: body.id, state: done.id });
-      await sb.from("tasks_log").insert({ user_id: USER, event_type: "issue_closed", occurred_at: now, linear_issue_id: body.id, source: "face", payload: { key: body.key ?? null, title: body.title ?? null } });
+    if (body.op === "item_snooze") {
+      // a due date moved forward by his hand; the desk keeps the item, the day stops shouting
+      await sb.from("desk_items").update({ due: body.due ?? null }).eq("id", body.id);
       return j({ ok: true }, headers);
     }
-    if (body.op === "linear_add") {
-      if (!cfg.linear_api_key) return j({ error: "no linear key" }, headers, 500);
-      const teams = await linearQuery(cfg.linear_api_key, `query { viewer { id teams { nodes { id key name } } } }`);
-      const team = (teams.viewer?.teams?.nodes ?? []).find((t: any) => /jer/i.test(t.key) || /jer/i.test(t.name)) ?? teams.viewer?.teams?.nodes?.[0];
-      if (!team) return j({ error: "no team" }, headers, 500);
-      const r = await linearQuery(cfg.linear_api_key, `mutation($teamId: String!, $title: String!, $desc: String, $assignee: String, $due: TimelessDate, $priority: Int) { issueCreate(input: { teamId: $teamId, title: $title, description: $desc, assigneeId: $assignee, dueDate: $due, priority: $priority }) { success issue { id identifier url } } }`, { teamId: team.id, title: String(body.title).slice(0, 200), desc: body.detail ?? null, assignee: teams.viewer.id, due: body.due ?? null, priority: body.priority ?? 3 });
-      return j({ ok: true, issue: r.issueCreate?.issue }, headers);
+    // his Fortify map: a rating with its words. Every number his own, every one changeable.
+    if (body.op === "rate") {
+      const rating = Number(body.rating); const domain = String(body.domain ?? "").toUpperCase();
+      if (!(rating >= 0 && rating <= 10) || !/^[A-Z]{2}$/.test(domain)) return j({ error: "rating 0 to 10 and a domain code" }, headers, 400);
+      const r = await sb.from("face_map_ratings").insert({ user_id: USER, domain, rating, words: body.words ? String(body.words).slice(0, 600) : null, cycle: body.cycle ?? null }).select("domain, rating, words, captured_at, cycle").single();
+      if (r.error) return j({ error: r.error.message }, headers, 500);
+      return j({ ok: true, rating: r.data }, headers);
+    }
+    if (body.op === "plan_add") {
+      const r = await sb.from("face_plan").insert({ user_id: USER, practice_id: String(body.practice_id).slice(0, 80), domains: body.domains ?? [], dose: body.dose ?? null, day: body.day ?? null, gas: body.gas ?? null, gas_now: body.gas_now ?? null, status: "active" }).select("id").single();
+      if (r.error) return j({ error: r.error.message }, headers, 500);
+      return j({ ok: true, id: r.data?.id }, headers);
+    }
+    if (body.op === "plan_set") {
+      const patch: any = { updated_at: now };
+      for (const k of ["dose", "day", "gas", "gas_now", "status", "domains"]) if (k in body) patch[k] = body[k];
+      await sb.from("face_plan").update(patch).eq("id", body.id).eq("user_id", USER);
+      return j({ ok: true }, headers);
+    }
+    if (body.op === "plan_del") {
+      await sb.from("face_plan").update({ status: "deleted", updated_at: now }).eq("id", body.id).eq("user_id", USER);
+      return j({ ok: true }, headers);
+    }
+    if (body.op === "state_set") {
+      const key = String(body.key ?? ""); if (!key || key.length > 80) return j({ error: "key" }, headers, 400);
+      await stateSet(key, body.value ?? null);
+      return j({ ok: true }, headers);
     }
     if (body.op === "read") {
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
@@ -221,7 +256,42 @@ Deno.serve(async (req: Request) => {
       const system = `You write one honest line for Jeremy Runge's own life dashboard. He is an adult expert in his own life; you never scold, cap, coddle, or assess him, and you never mention safety. Return ONLY JSON: {"line": string, "number": string, "evidence": [string, string, string]}. "line" is one sentence, plain words, under 26 words, that says what today is actually about given the facts, with a specific move in it. "number" is the single most important number today with its unit and a two-word label (for example "31.3 lb off the high"). "evidence" is three short receipts, each a fact from the data with its date. Never use an em dash. No adjectives about him.`;
       const raw = await ask(apiKey, system, `Today is ${today}. Facts from his tables and feeds:\n${facts}`, 500);
       let out: any; try { out = parseJson(raw); } catch { out = { line: raw.slice(0, 200), number: "", evidence: [] }; }
+      await stateSet(`read:${today}`, out);
       return j({ ok: true, read: out }, headers);
+    }
+    // THE COUNSEL: the day read through the method. Cached per day on the hash of what it saw.
+    if (body.op === "counsel") {
+      const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+      if (!apiKey) return j({ error: "ANTHROPIC_API_KEY not set" }, headers, 500);
+      const input = body.input ?? {};
+      const hash = (await sha256hex(JSON.stringify(input))).slice(0, 16);
+      const cached: any = await stateGet(`counsel:${today}`);
+      const ageMin = cached ? (Date.now() - new Date(cached.updated_at).getTime()) / 60000 : 1e9;
+      if (!body.force && cached && cached.value && (cached.value.hash === hash || ageMin < 150)) return j({ ok: true, counsel: cached.value, cached: true }, headers);
+      const system = [
+        `You are the mind inside Jeremy Runge's own life instrument, 29:11, and you run his day through the Fortify method. He is an adult expert in his own life. Never scold, cap, coddle, gate, or assess him; never mention safety or protection; his diagnoses (ADHD hyperfocus, completeness, precision, drive) are strengths you design for. Plain words, specific moves with a dose and a day, every number with its date. Never use an em dash. Return ONLY JSON.`,
+        FORTIFY,
+        `You receive: facts (numbers with dates), signals (what his data says per domain), pressure (0 to 100 per domain), his map ratings when he has rated, the keystone the offline engine chose (or the one he set; his word wins), the rung it chose (or his word), the block of the day, and candidates for Next (id, title, why, domain).`,
+        `Return: {"read": {"line": string (one sentence, under 26 words, what today is about with a move in it), "number": string ("31.3 lb off the high"), "evidence": [string, string, string] (three receipts in plain words, each a fact with its date, like "6h 26m of sleep on Sep 10"; never print signal codes or scores like "CG 0.60")},`,
+        ` "keystone": {"line": "FI·ID" style pair id, "name": string, "why": string (one sentence naming the mechanism in his numbers)},`,
+        ` "move": {"title": string (the one thing today that works the keystone), "practice_id": string (from the Arsenal ids), "dose": string ("35 minutes"), "when": string ("after the 2pm meds"), "why": string},`,
+        ` "rung": {"level": "full"|"reduced"|"floor", "why": string},`,
+        ` "next": [{"id": string, "why": string}] (up to 5 candidate ids in the order he should take them, each why rewritten in plain words that name the domain it serves),`,
+        ` "stage": {"name": "Align"|"Investigate"|"Strengthen"|"Move forward", "line": string (one sentence on where he is in the method today)}}`,
+        `Keep it compact: every why under 20 words, every line under 26 words, compact JSON with no prose before or after it. Use only the numbers the facts carry and their stated direction against the week; never assert a trend the facts do not state. If he set the keystone or the rung, keep his and say so in why. Today is ${today}.`,
+      ].join("\n");
+      const user = JSON.stringify(input).slice(0, 14000);
+      let raw = await ask(apiKey, system, user, 2600);
+      let out: any;
+      try { out = parseJson(raw); } catch {
+        // once more, asking for nothing but the JSON, with room to finish it
+        raw = await ask(apiKey, system + "\nReturn ONLY the JSON object, complete, nothing else.", user, 3200);
+        try { out = parseJson(raw); } catch { return j({ error: "counsel did not parse", raw_len: raw.length, raw_tail: raw.slice(-120) }, headers, 500); }
+      }
+      out.hash = hash; out.at = now;
+      await stateSet(`counsel:${today}`, out);
+      if (out.read) await stateSet(`read:${today}`, out.read);
+      return j({ ok: true, counsel: out, cached: false }, headers);
     }
     if (body.op === "word" || body.op === "plan") {
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
@@ -232,15 +302,18 @@ Deno.serve(async (req: Request) => {
       const system = [
         `You organize work for Jeremy Runge inside his own app. He is an adult expert in his own life; you never scold, cap, or assess him. Plain words. Never use an em dash.`,
         `He types one sentence about something on his mind. Decide what it is and return ONLY JSON, no prose:`,
-        `{"kind":"routine"|"work"|"linear"|"note"|"person", "title": string, "why": string,`,
+        `{"kind":"routine"|"work"|"linear"|"note"|"person"|"rating"|"keystone"|"rung", "title": string, "why": string,`,
         ` "routine": {"cadence":"daily"|"weekly"|"as_needed","anchor":"wake"|"levo_gap_closed"|"meal_start"|"fork_down"|"dip_clear"|"gym_leave"|"wind_down"|"lights_down"|"close","kind":"self"|"body"|"food"|"meds"|"mind"|"home"|"work"} (only when kind is routine),`,
         ` "box": {"use_existing_id": string|null, "title": string, "why": string, "deadline": "YYYY-MM-DD"|null} (only when kind is work),`,
         ` "items": [{"text": string, "detail": string|null, "due": "YYYY-MM-DD"|null, "minutes": number, "steps": [string]}] (only when kind is work: 3 to 10 items in doing order, each one focused sprint of 15 to 45 minutes; a big item gets 2 to 6 steps under it; every step is one physical action; nothing vague),`,
         ` "linear": {"title": string, "detail": string|null, "due": "YYYY-MM-DD"|null, "priority": 1|2|3|4} (only when kind is linear: a single professional to-do that belongs in his Linear, not a project),`,
         ` "person": {"name": string, "note": string} (only when kind is person: something about a person in his life to remember or a contact to log),`,
+        ` "rating": {"domain": "PH"|"ME"|"CG"|"SX"|"RL"|"SC"|"FI"|"EN"|"SP"|"ID", "rating": 0..10, "words": string} (only when kind is rating: he rates a Fortify domain of his life, like "physical is a 4 today, short nights"),`,
+        ` "keystone": {"line": "FI·ID"|"PH·SX"|"PH·ME"|"SX·RL"|"FI·ME"|"SC·ME"|"SP·ID"|"CG·PH", "sentence": string} (only when kind is keystone: he names the pair he is working, in his words),`,
+        ` "rung": {"level": "full"|"reduced"|"floor", "why": string} (only when kind is rung: he declares the dose of the day, like "reduced today, slept five hours"),`,
         ` "questions": [string] (0 to 3 things you need from him to organize it better)}`,
         `Anchors mean: wake (first thing), levo_gap_closed (about 45 minutes after waking, after the thyroid pill), meal_start (with lunch), fork_down (after lunch), dip_clear (mid afternoon), gym_leave (after training), wind_down (evening), lights_down (bed), close (end of day sweep).`,
-        `If the sentence names a multi-week job (a move, a launch, a book, a sale), kind is work and the items are the days of it, in order, each a bounded sprint list. If it is one professional task, kind is linear. If it is a daily habit or a medical protocol, kind is routine. If it is about a person, kind is person. If it is only a thought to keep, kind is note.`,
+        `If the sentence names a multi-week job (a move, a launch, a book, a sale), kind is work and the items are the days of it, in order, each a bounded sprint list. If it is one professional task, kind is linear. If it is a daily habit or a medical protocol, kind is routine. If it is about a person, kind is person. If it rates a domain of his life, kind is rating. If it names the keystone pair he is working, kind is keystone. If it declares the day's dose, kind is rung. If it is only a thought to keep, kind is note.`,
         `Existing boxes (id | title), reuse one when the sentence clearly belongs to it:\n${boxList}`,
         `Today is ${today}.`,
       ].join("\n");
@@ -252,6 +325,13 @@ Deno.serve(async (req: Request) => {
         const ins = await sb.from("checklist_templates").insert({ user_id: USER, type: TYPE_FOR_ANCHOR[anchor] ?? "morning", title: String(plan.title).slice(0, 160), kind: r.kind ?? "self", cadence: r.cadence ?? "daily", anchor, sort_order: 999, why: plan.why ?? null, senior: false, may_knock: false, rungs_authored: false, paused: false }).select("id").single();
         if (ins.error) return j({ error: ins.error.message }, headers, 500);
         did.routine_id = ins.data?.id;
+      } else if (plan.kind === "rating" && plan.rating) {
+        const rt = plan.rating; const rating = Number(rt.rating);
+        if (rating >= 0 && rating <= 10 && /^[A-Z]{2}$/.test(String(rt.domain))) { await sb.from("face_map_ratings").insert({ user_id: USER, domain: rt.domain, rating, words: rt.words ? String(rt.words).slice(0, 600) : text.slice(0, 600) }); did.domain = rt.domain; did.rating = rating; }
+      } else if (plan.kind === "keystone" && plan.keystone) {
+        await stateSet("keystone", { line: plan.keystone.line, sentence: plan.keystone.sentence ?? text, set_at: now });
+      } else if (plan.kind === "rung" && plan.rung) {
+        await stateSet(`rung:${today}`, { level: plan.rung.level, why: plan.rung.why ?? text, date: today, set_at: now });
       } else if (plan.kind === "linear" && cfg.linear_api_key) {
         const l = plan.linear ?? {};
         const teams = await linearQuery(cfg.linear_api_key, `query { viewer { id teams { nodes { id key name } } } }`);
@@ -261,7 +341,7 @@ Deno.serve(async (req: Request) => {
       } else if (plan.kind === "person") {
         const p = plan.person ?? {}; const name = String(p.name ?? plan.title).slice(0, 120);
         const found = await sb.from("people").select("id, notes").ilike("name", `%${name.split(" ")[0]}%`).limit(1);
-        if (found.data?.[0]) { await sb.from("people").update({ notes: [found.data[0].notes, `${today}: ${p.note ?? text}`].filter(Boolean).join("\n"), last_contacted: body.touched ? today : undefined, updated_at: now }).eq("id", found.data[0].id); did.person_id = found.data[0].id; }
+        if (found.data?.[0]) { await sb.from("people").update({ notes: [found.data[0].notes, `${today}: ${p.note ?? text}`].filter(Boolean).join("\n"), updated_at: now }).eq("id", found.data[0].id); did.person_id = found.data[0].id; }
         else { const ins = await sb.from("people").insert({ user_id: USER, name, category: "friend", cadence: "monthly", notes: `${today}: ${p.note ?? text}`, status: "active", source: "face" }).select("id").single(); did.person_id = ins.data?.id; }
       } else if (plan.kind === "work") {
         const b = plan.box ?? {};
