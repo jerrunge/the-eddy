@@ -9,7 +9,7 @@
 //   morning  { date? }                          -> { date, sitting:[card], behind:[group], doors:[door], week:[day], routines_seeded, served_at }
 //   tap      { card_id, action, post_id?, post_ids?, url?, value?, choice?, text?, source? } -> { ok, card }
 //   text     { card_id, post_id? }              -> { ok, copy:[...] }   copy for a card the composition left thin
-//   GET ?op=photo&path=<vault path>  (token as Bearer, x-device-token, or ?token=) -> the image bytes
+//   GET ?op=photo&path=<vault path>  (token as Authorization: Bearer or x-device-token; never in the URL) -> the image bytes
 //
 // door.pill.state is ok | wait | quiet (the contract the two renderers share); card.photo carries
 // path, alt, and url (null when the photo lives outside the vault, e.g. the iCloud frames).
@@ -38,7 +38,7 @@ const CACHE_MIN = 10;
 
 const headersFor = (origin: string | null) => ({
   "Access-Control-Allow-Origin": origin || "*",
-  "Access-Control-Allow-Headers": "content-type, authorization",
+  "Access-Control-Allow-Headers": "content-type, authorization, x-device-token",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
   "Cache-Control": "no-store",
@@ -101,8 +101,8 @@ function tapLabel(platform: string, format: string) {
 }
 function esc(s: any) { return String(s == null ? "" : s); }
 // A photo the phone can load: only a file in the vault has one (the Way of Dad frames live in
-// iCloud and carry a name only). The face loads it with the device token as a bearer header,
-// or as ?token= for an image view that cannot set headers.
+// iCloud and carry a name only). The face loads it with the device token as a header
+// (Authorization: Bearer, or x-device-token) through URLSession; the token never rides in a URL.
 const API_URL = () => (Deno.env.get("SUPABASE_URL") || "") + "/functions/v1/morning-api";
 function isVaultImage(path: string) { return /^docs\/[^\s]+\.(png|jpe?g|gif|webp)$/i.test(path); }
 function photoUrl(path: string) { return isVaultImage(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null; }
@@ -284,7 +284,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "GET") {
     const u = new URL(req.url);
     if (u.searchParams.get("op") !== "photo") return j({ error: "POST, or GET ?op=photo" }, headers, 405);
-    const given = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "") || req.headers.get("x-device-token") || u.searchParams.get("token") || "";
+    // The token travels only in a header, never in the URL: URLs land in logs.
+    const given = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "") || req.headers.get("x-device-token") || "";
     const hashesG = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
     const acceptedG = hashesG.length ? hashesG : FACE_HASHES;
     const serviceG = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
