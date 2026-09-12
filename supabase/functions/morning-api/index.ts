@@ -351,7 +351,7 @@ Deno.serve(async (req: Request) => {
           const rpMark = todaysRoutines.find((r: any) => /repl/i.test(r.what)); const rp = rpMark ? marks.get(rpMark.id) : null;
           d.numbers.push({ label: "DMs today", value: dm?.value ?? "not yet" }, { label: "replies today", value: rp?.value ?? "not yet" });
           if (nextRow) d.next = "Tomorrow: " + pieceTitle(nextRow).replace(/^Day \d+: /, "") + ".";
-          d.links.push({ label: "Everything Dad", href: "https://wayofdad.co/dad-b3ab3e/" }, { label: "Bluesky", href: "https://bsky.app/profile/wayofdad.co" }, { label: "X", href: "https://x.com/wayofdad" }, { label: "Instagram", href: "https://www.instagram.com/way.of.dad/" });
+          d.links.push({ label: "Everything Dad", href: "https://jerrunge.github.io/the-eddy/dad-b3ab3e/" }, { label: "Bluesky", href: "https://bsky.app/profile/wayofdad.co" }, { label: "X", href: "https://x.com/wayofdad" }, { label: "Instagram", href: "https://www.instagram.com/way.of.dad/" });
         }
         if (id === "fortify") {
           const disc = opps.filter((o: any) => o.pillar === "fortify" && /discover/i.test(o.stage || "")).length;
