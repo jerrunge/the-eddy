@@ -340,7 +340,7 @@ Deno.serve(async (req: Request) => {
         if (id === "wayofdad") {
           const day0 = hubContent?.day0 || null;
           const dayN = day0 ? Math.round((new Date(today + "T12:00:00Z").getTime() - new Date(day0 + "T12:00:00Z").getTime()) / 86400000) : null;
-          const total = hubCards.size || 13;
+          const total = hubCards.has(0) ? hubCards.size - 1 : (hubCards.size || 13);
           if (live?.bluesky?.at) {
             const postedDay = new Date(live.bluesky.at).toLocaleDateString("en-CA", { timeZone: TZ });
             const postedTime = new Date(live.bluesky.at).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).toLowerCase().replace(" ", "");
@@ -357,7 +357,7 @@ Deno.serve(async (req: Request) => {
           const disc = opps.filter((o: any) => o.pillar === "fortify" && /discover/i.test(o.stage || "")).length;
           const dayc = opps.filter((o: any) => o.pillar === "fortify" && /^day/i.test(o.stage || "")).length;
           d.numbers.push({ label: "Discovery", value: disc }, { label: "Day", value: dayc });
-          const shoot = routines.find((r: any) => r.door === "fortify" && /shoot/i.test(r.what) && r.starts_on);
+          const shoot = routines.find((r: any) => r.door === "fortify" && /^shoot/i.test(r.what) && r.starts_on && r.starts_on === r.ends_on);
           if (shoot && shoot.starts_on >= today) d.next = "Shoot " + niceDate(shoot.starts_on) + ". " + (nextRow ? "Then " + pieceTitle(nextRow) + " " + niceDate(nextRow.scheduled_for.slice(0, 10)) + "." : "");
           else if (nextRow) d.next = "Next: " + pieceTitle(nextRow) + ", " + niceDate(nextRow.scheduled_for.slice(0, 10)) + ".";
           if (undatedCount) d.numbers.push({ label: "staged, no day", value: undatedCount });
@@ -394,7 +394,7 @@ Deno.serve(async (req: Request) => {
         const rts = routines.filter((r: any) => (r.days || []).includes(wdi) && (!r.starts_on || r.starts_on <= day) && (!r.ends_on || r.ends_on >= day));
         const special = rts.find((r: any) => r.starts_on && r.ends_on && r.starts_on === r.ends_on);
         const titles = i === 0 ? rows.map((c) => c.what) : [...new Set(rows.map((r: any) => pieceTitle(r)))];
-        let label = special ? special.what : (titles[0] || null);
+        let label = special ? special.what : (titles[0] || (i === 0 ? (sitting.find((c) => c.status === "open") || {}).what || null : null));
         if (label) label = label.replace(/^(Day \d+|Video \d+ of \d+)[:.]?\s*/i, (m) => m.trim().replace(/[:.]$/, "") + ": ").replace(/: $/, "");
         week.push({ date: day, dow: DOW[wdi], count: (i === 0 ? sitting.filter((c) => c.status === "open").length : titles.length + rts.length), posts: titles.length, routines: rts.length, label: label ? label.slice(0, 48) : null });
       }
