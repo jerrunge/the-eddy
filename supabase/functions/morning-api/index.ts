@@ -44,6 +44,14 @@ async function sha256hex(s: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+async function serviceProbe(bearer: string): Promise<boolean> {
+  try {
+    const r = await fetch(Deno.env.get("SUPABASE_URL") + "/rest/v1/hub_content?select=key&limit=1", { headers: { apikey: bearer, authorization: "Bearer " + bearer }, signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return false;
+    const rows = await r.json();
+    return Array.isArray(rows) && rows.length > 0;
+  } catch { return false; }
+}
 const ptToday = () => new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 function ptNow() {
   const f = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true });
@@ -269,8 +277,12 @@ Deno.serve(async (req: Request) => {
   const hashes = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
   const accepted = hashes.length ? hashes : FACE_HASHES;
   const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  const viaService = !!serviceKey && bearer === serviceKey;
   const viaToken = !!body.token && accepted.includes(await sha256hex(String(body.token)));
+  // The Chart House Pages function speaks with the service role as a bearer. The key it holds may
+  // be the legacy JWT or the newer secret; either way, a bearer that can read an RLS-sealed table
+  // through PostgREST is the service role, and nothing else is.
+  let viaService = !!serviceKey && bearer.length > 20 && bearer === serviceKey;
+  if (!viaService && !viaToken && bearer.length > 20) viaService = await serviceProbe(bearer);
   if (!viaService && !viaToken) return j({ error: "bad token" }, headers, 403);
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
   const today = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : ptToday();
