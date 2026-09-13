@@ -1,23 +1,40 @@
-// morning-api: the one composition behind the Morning (RULINGS 2026-09-12, "the Morning is go").
-// Two renderers read it, the Chart House and the 29:11 face, and both write taps back through it.
+// morning-api v9: THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
+// shows what he is supposed to do just today, and no two tabs disagreeing). One composition
+// of the day for every surface: the Chart House's Morning room, the 29:11 face on the phone,
+// the iPad, the Mac, the Watch, the menu bar, Siri. Every renderer reads this; every tap
+// writes back through it. Nothing else composes a "next".
+//
+// The day is everything the face knows, dated: content dated today, desk items due today,
+// project moves targeted today, Linear issues due today or urgent, the routines of today
+// (checklist_templates by block; the Morning's five moved in, one table), the rulings owed,
+// the meds by window, and the calendar. Three buckets, never mixed:
+//   sitting  today, in the order of the day (time, then door), each card carrying its block
+//   later    dated ahead, the next seven days, grouped by day
+//   behind   dated in the past, grouped by campaign, box, project, or Linear; one line each
+// Undated things are neither today nor behind: they live in Work under their box, and the
+// composer writes `undated` counts (in all, per door, per box) so a door can say
+// "34 items with no day". Floors, not ceilings: no caps, no hidden rows.
 //
 // Door: the same device token as the Harbor, the hub, and the face (SHA-256 against the accepted
 // hashes; MORNING_TOKEN_HASHES in the env overrides the face's list), or the service role key as a
 // bearer for the Chart House's own Pages function. No anon path.
 //
 // Ops (POST, json):
-//   morning  { date? }                          -> { date, sitting:[card], behind:[group], doors:[door], week:[day], routines_seeded, served_at }
+//   morning  { date? }                          -> { date, sitting:[card], later:[day], behind:[group], undated, doors:[door], week:[day], counts, served_at }
 //   tap      { card_id, action, post_id?, post_ids?, url?, value?, choice?, text?, source? } -> { ok, card }
+//            card ids: content:<id> routine:<id> ruling:<id> item:<id> move:<id> linear:<id> med:<timing> calendar:<id>
+//            actions: posted sent done hold skip ruled undo reopen (done on a med card takes post_id = the medication)
 //   text     { card_id, post_id? }              -> { ok, copy:[...] }   copy for a card the composition left thin
 //   GET ?op=photo&path=<vault path>  (token as Authorization: Bearer or x-device-token; never in the URL) -> the image bytes
 //
 // door.pill.state is ok | wait | quiet (the contract the two renderers share); card.photo carries
 // path, alt, and url (null when the photo lives outside the vault, e.g. the iCloud frames).
 //
-// A card: { id, source: content|routine|ruling, time, door, what, why, copy:[{label, platforms, text}],
-//           photo:{path, alt}|null, kit:{to, from, when, how}|null, taps:[{action, label, post_id?}],
-//           status, posts:[{id, platform, status, url}] (content), options:[{key,label}] (ruling),
-//           links:[{label, href}], overdue_since?, campaign?, ask? }
+// A card: { id, source: content|routine|ruling|work|move|linear|meds|calendar, time, block, door, what, why,
+//           copy:[{label, platforms, text}], photo:{path, alt}|null, kit:{to, from, when, how}|null,
+//           taps:[{action, label, post_id?}], status, posts:[{id, platform, status, url}] (content; the meds
+//           of a window on a meds card), options:[{key,label}] (ruling), links:[{label, href}], day,
+//           overdue_since?, campaign? (content), box? (work), project? (move), anchor? cadence? rungs? (routine) }
 //
 // Floors, not ceilings. Nothing here counts him, caps him, or hides a row from him: overdue rows
 // older than a week travel in `behind`, grouped by campaign, every card intact.
@@ -157,8 +174,9 @@ function copyPaths(post: any): string[] {
 
 // ----- composition -----
 type Card = any;
-async function contentCards(sb: any, today: string, hubCards: Map<number, any>, withText: boolean, onlyIds?: string[]) {
+async function contentCards(sb: any, today: string, hubCards: Map<number, any>, withText: boolean, onlyIds?: string[], ahead?: { from: string; to: string }) {
   let q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").eq("user_id", USER).not("status", "in", "(published,archived)").not("scheduled_for", "is", null).lte("scheduled_for", today).order("scheduled_for");
+  if (ahead) q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").eq("user_id", USER).not("status", "in", "(published,archived)").gt("scheduled_for", ahead.from).lte("scheduled_for", ahead.to + "T23:59:59").order("scheduled_for");
   if (onlyIds && onlyIds.length) q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").in("id", onlyIds);
   const rows = (await q).data ?? [];
   const groups = new Map<string, any[]>();
@@ -208,6 +226,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
       id: "content:" + lead.id,
       source: "content",
       time: slotTime(m, door),
+      block: blockOf(slotTime(m, door)),
       door,
       what: pieceTitle(lead),
       why: m.why || null,
@@ -234,6 +253,7 @@ function routineCard(r: any, mark: any, today: string): Card {
     id: "routine:" + r.id,
     source: "routine",
     time: r.time || DOOR_TIME[r.door],
+    block: blockOf(r.time || DOOR_TIME[r.door]),
     door: r.door,
     what: r.what,
     why: r.why || null,
@@ -260,6 +280,7 @@ function rulingCard(r: any): Card {
     id: "ruling:" + r.id,
     source: "ruling",
     time: "8:20am",
+    block: "Wake",
     door: r.door || "house",
     what: r.question,
     why: r.context || null,
@@ -275,6 +296,162 @@ function rulingCard(r: any): Card {
     answer_text: r.answer_text || null,
     asked_at: r.asked_at,
   };
+}
+
+// ----- the one Today engine: the other things the face knows, as cards -----
+// Anchors are the app's (Face/FaceDerive.swift): the block a routine belongs to and the hour it reads as.
+const ANCHOR_TIME: Record<string, string> = { wake: "7:00am", levo_gap_closed: "7:30am", meal_start: "12:00pm", fork_down: "12:45pm", dip_clear: "3:00pm", gym_leave: "5:00pm", wind_down: "7:30pm", close: "9:00pm", lights_down: "9:30pm" };
+const ANCHOR_BLOCK: Record<string, string> = { wake: "Wake", levo_gap_closed: "Wake", meal_start: "Midday", fork_down: "Midday", dip_clear: "Midday", gym_leave: "Midday", wind_down: "Evening", lights_down: "Evening", close: "Close" };
+const ANCHOR_NAME: Record<string, string> = { wake: "first thing", levo_gap_closed: "after the levo gap", meal_start: "with lunch", fork_down: "after lunch", dip_clear: "mid afternoon", gym_leave: "after the gym", wind_down: "evening", lights_down: "lights down", close: "the close" };
+const MED_TIME: Record<string, string> = { on_waking: "7:00am", with_breakfast: "8:30am", pre_gym: "2:00pm", bedtime: "9:30pm", weekly: "9:00am" };
+const MED_LABEL: Record<string, string> = { on_waking: "On waking", with_breakfast: "With breakfast", pre_gym: "Before the gym", bedtime: "Bedtime", weekly: "Thursday, weekly" };
+const MED_ORDER = ["on_waking", "with_breakfast", "weekly", "pre_gym", "bedtime"];
+const WORK_TIME = "9:00am";     // a dated thing with no clock time sits at the top of the work morning
+const LATER_DAYS = 7;
+// The block a clock time falls in, the app's own edges (Wake before 11, Midday before 5, Evening before 9, then Close).
+const BLOCKS = ["Wake", "Midday", "Evening", "Close", "Any time"];
+function blockOf(time: string | null | undefined, anchor?: string | null): string {
+  if (anchor && ANCHOR_BLOCK[anchor]) return ANCHOR_BLOCK[anchor];
+  const k = timeKey(time);
+  if (k >= 9998) return "Any time";
+  return k < 11 * 60 ? "Wake" : k < 17 * 60 ? "Midday" : k < 21 * 60 ? "Evening" : "Close";
+}
+function clockOf(t: string | null | undefined): string | null {
+  // "07:45:00" (a time column) -> "7:45am"; "7:45am" stays
+  if (!t) return null;
+  const m = String(t).match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!m) return String(t);
+  const h = Number(m[1]); const ap = h >= 12 ? "pm" : "am"; const hh = h % 12 === 0 ? 12 : h % 12;
+  return hh + ":" + m[2] + ap;
+}
+function ptClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }).toLowerCase().replace(/\s/g, "");
+}
+function ptDate(iso: string): string { return new Date(iso).toLocaleDateString("en-CA", { timeZone: TZ }); }
+function doorOfBox(title: string): string { return /walks/i.test(title) ? "walks" : "house"; }
+function daysBetween(a: string, b: string) { return Math.round((new Date(b + "T12:00:00Z").getTime() - new Date(a + "T12:00:00Z").getTime()) / 86400000); }
+function ago(day: string, today: string): string { const d = daysBetween(day, today); return d <= 0 ? "today" : d === 1 ? "1 day past" : d + " days past"; }
+
+// A routine of the day, from checklist_templates (the one table). The Morning's five carry door,
+// copy, ask, links; the body's thirty carry the rungs. Both are the same card.
+function checklistCard(t: any, comp: any, today: string): Card {
+  const time = t.time && t.time !== "later" ? t.time : (clockOf(t.window_start) || ANCHOR_TIME[t.anchor] || "later");
+  const status = !comp ? "open" : comp.skipped ? "skipped" : "done";
+  const copy = Array.isArray(t.copy) ? t.copy : (t.copy ? [t.copy] : []);
+  return {
+    id: "routine:" + t.id, source: "routine", time, block: blockOf(time, t.anchor), door: t.door || null,
+    what: t.title, why: t.why || null, copy, photo: null, kit: null,
+    taps: [{ action: "done", label: "Done" }, { action: "skip", label: "Skip" }],
+    ask: t.ask || null, links: Array.isArray(t.links) ? t.links : [],
+    status, value: comp ? comp.value ?? null : null, marked_at: comp ? comp.completed_at : null,
+    anchor: t.anchor || null, anchor_name: ANCHOR_NAME[t.anchor] || null, cadence: t.cadence || "daily",
+    rungs: (t.rung_full || t.rung_reduced || t.rung_floor) ? { full: t.rung_full || null, reduced: t.rung_reduced || null, floor: t.rung_floor || null } : null,
+    first_motion: t.first_physical_motion || null, source_path: t.source_path || null, day: today,
+  };
+}
+function itemCard(it: any, box: any, today: string): Card {
+  const day = it.due;
+  const links: any[] = [];
+  const url = String(it.detail || "").match(/https?:\/\/\S+/);
+  if (url) links.push({ label: "Open", href: url[0] });
+  if (it.linear_ref && /^https?:/.test(it.linear_ref)) links.push({ label: "In Linear", href: it.linear_ref });
+  return {
+    id: "item:" + it.id, source: "work", time: WORK_TIME, block: "Wake", door: doorOfBox(box?.title || ""),
+    what: it.text, why: it.detail && !url ? it.detail : (day && day < today ? ago(day, today) + " · " + (box?.title || "") : (box?.title || null)),
+    copy: [], photo: null, kit: null,
+    taps: [{ action: "done", label: "Done" }, { action: "hold", label: "Tomorrow" }, { action: "hold", label: "Next week", value: "7" }],
+    links, status: it.done ? "done" : "open", box: box?.title || null, box_id: it.box_id, kind: it.kind || "task",
+    options: it.kind === "decision" && Array.isArray(it.options) ? it.options.map((o: any) => (typeof o === "string" ? { key: o, label: o } : { key: o.key || o.id || o.label, label: o.label || o.text || String(o.key || "") })) : [],
+    day, overdue_since: day && day < today ? day : null,
+  };
+}
+function moveCard(m: any, project: any, today: string): Card {
+  const day = m.target_ymd;
+  return {
+    id: "move:" + m.id, source: "move", time: WORK_TIME, block: "Wake", door: "house",
+    what: m.title, why: m.why || (project ? "Step " + (m.stage ?? "") + " of " + project.title : null),
+    copy: [], photo: null, kit: null,
+    taps: [{ action: "done", label: "Done" }, { action: "hold", label: "Tomorrow" }],
+    links: [], status: m.status === "done" ? "done" : "open", project: project?.title || null, project_id: m.project_id, stage: m.stage ?? null,
+    day, overdue_since: day && day < today ? day : null,
+  };
+}
+function linearCard(i: any, today: string): Card {
+  const day = i.due || null;
+  const p = i.priority;
+  const why = [i.project ? String(i.project).replace(/^[^\w]+/, "").trim() : null, i.state || null, p === 1 ? "urgent" : p === 2 ? "high" : null, day && day < today ? ago(day, today) : null].filter(Boolean).join(" · ");
+  return {
+    id: "linear:" + i.id, source: "linear", time: WORK_TIME, block: "Wake", door: "house",
+    what: (i.key ? i.key + " " : "") + i.title, why: why || null, copy: [], photo: null, kit: null,
+    taps: [{ action: "done", label: "Done in Linear" }, { action: "hold", label: "Tomorrow" }],
+    links: i.url ? [{ label: "Open in Linear", href: i.url }] : [], status: "open", priority: p ?? null, linear_key: i.key || null, team_id: i.team_id || null,
+    day, overdue_since: day && day < today ? day : null,
+  };
+}
+// One card per meds window: every med of the window as a "post" (taken or due), one tap per med and one for all.
+function medsCard(timing: string, meds: any[], log: any[], today: string): Card {
+  const taken = new Map<string, any>();
+  for (const l of log) { if (l.medication_id) taken.set(l.medication_id, l); taken.set("name:" + l.med_name, l); }
+  const posts = meds.map((m) => { const l = taken.get(m.id) || taken.get("name:" + m.name); return { id: m.id, platform: m.name + (m.dose ? " " + m.dose : ""), status: l ? "taken" : "due", url: null, at: l ? l.taken_at : null }; });
+  const left = posts.filter((p) => p.status === "due");
+  const taps: any[] = [];
+  if (left.length > 1) taps.push({ action: "done", label: "Taken, all " + left.length });
+  for (const p of left) taps.push({ action: "done", label: "Taken: " + p.platform, post_id: p.id });
+  return {
+    id: "med:" + timing, source: "meds", time: MED_TIME[timing] || "later", block: blockOf(MED_TIME[timing]), door: null,
+    what: "Meds, " + (MED_LABEL[timing] || timing).toLowerCase() + ": " + meds.map((m) => m.name).join(", "),
+    why: left.length === 0 ? "All taken." : left.length === meds.length ? null : left.length + " of " + meds.length + " still due.",
+    copy: [], photo: null, kit: null, taps, links: [], status: left.length === 0 ? "done" : "open", posts, timing, day: today,
+  };
+}
+function calendarCard(ev: any, today: string, nowIso: string): Card {
+  const start = ev.start_at ? ptClock(ev.start_at) : null;
+  const over = ev.end_at ? ev.end_at < nowIso : false;
+  return {
+    id: "calendar:" + (ev.id || ev.event_id || ev.summary), source: "calendar", time: ev.all_day ? "all day" : (start || "later"), block: ev.all_day ? "Wake" : blockOf(start), door: null,
+    what: ev.summary, why: [ev.location || null, ev.end_at && !ev.all_day ? "until " + ptClock(ev.end_at) : null].filter(Boolean).join(" · ") || null,
+    copy: [], photo: null, kit: null, taps: [], links: ev.html_link ? [{ label: "Open", href: ev.html_link }] : [], status: over ? "done" : "open", day: today,
+  };
+}
+
+// ----- Linear (the key the face keeps in eddy_config; read with a short cache, written on a tap) -----
+let linearCache: { at: number; rows: any[] } | null = null;
+async function linearQuery(key: string, query: string, variables: Record<string, unknown> = {}) {
+  const r = await fetch("https://api.linear.app/graphql", { method: "POST", headers: { "content-type": "application/json", authorization: key }, body: JSON.stringify({ query, variables }), signal: AbortSignal.timeout(12000) });
+  const d = await r.json();
+  if (!r.ok || d.errors) throw new Error("linear " + r.status + " " + JSON.stringify(d.errors ?? d).slice(0, 160));
+  return d.data;
+}
+async function linearKey(sb: any): Promise<string> {
+  try { const r = await sb.from("eddy_config").select("value").eq("key", "linear_api_key").maybeSingle(); return String(r.data?.value || ""); } catch { return ""; }
+}
+async function linearOpen(key: string): Promise<any[]> {
+  if (linearCache && Date.now() - linearCache.at < 5 * 60000) return linearCache.rows;
+  const d = await linearQuery(key, `query { viewer { assignedIssues(first: 100, filter: { state: { type: { nin: ["completed", "canceled"] } } }, orderBy: updatedAt) { nodes { id identifier title priority dueDate url updatedAt state { name type } project { name } labels { nodes { name } } team { id } } } } }`);
+  const rows = (d.viewer?.assignedIssues?.nodes ?? []).map((i: any) => ({ id: i.id, key: i.identifier, title: i.title, priority: i.priority, due: i.dueDate, url: i.url, updated: i.updatedAt, state: i.state?.name, state_type: i.state?.type, project: i.project?.name, labels: (i.labels?.nodes ?? []).map((l: any) => l.name), team_id: i.team?.id }));
+  linearCache = { at: Date.now(), rows };
+  return rows;
+}
+async function linearSetState(key: string, issueId: string, type: "completed" | "unstarted") {
+  const d = await linearQuery(key, `query($id: String!) { issue(id: $id) { id team { states { nodes { id name type position } } } } }`, { id: issueId });
+  const states = (d.issue?.team?.states?.nodes ?? []).filter((s: any) => s.type === type).sort((a: any, b: any) => a.position - b.position);
+  if (!states.length) throw new Error("no " + type + " state on the team");
+  await linearQuery(key, `mutation($id: String!, $state: String!) { issueUpdate(id: $id, input: { stateId: $state }) { success } }`, { id: issueId, state: states[0].id });
+  linearCache = null;
+}
+async function linearSetDue(key: string, issueId: string, due: string | null) {
+  await linearQuery(key, `mutation($id: String!, $due: TimelessDate) { issueUpdate(id: $id, input: { dueDate: $due }) { success } }`, { id: issueId, due });
+  linearCache = null;
+}
+
+// Every completion of a template on a day is deleted before one is written: one mark per routine per day.
+async function writeCompletion(sb: any, templateId: string, today: string, now: string, skipped: boolean, value: string | null, source: string) {
+  await sb.from("checklist_completions").delete().eq("template_id", templateId).eq("date", today);
+  const row: any = { template_id: templateId, user_id: USER, date: today, completed_at: now, skipped, value, source };
+  let u = await sb.from("checklist_completions").insert(row);
+  if (u.error && /column/i.test(u.error.message)) { delete row.value; delete row.source; u = await sb.from("checklist_completions").insert(row); }
+  if (u.error) throw new Error(u.error.message);
+  return row;
 }
 
 async function liveChecks(sb: any) {
@@ -337,9 +514,13 @@ Deno.serve(async (req: Request) => {
 
   try {
     if (body.op === "morning") {
-      const [hub, routinesQ, marksQ, rulingsQ, live, oppsQ, walksQ, aheadQ, undatedQ] = await Promise.all([
+      const wd = dow(today);
+      const later_to = addDays(today, LATER_DAYS);
+      const [hub, tplQ, compQ, legacyRoutinesQ, legacyMarksQ, rulingsQ, live, oppsQ, walksQ, aheadQ, undatedQ, boxesQ, itemsQ, projectsQ, movesQ, medsQ, medLogQ, calQ, lkey] = await Promise.all([
         sb.from("hub_content").select("content").eq("key", "wayofdad").maybeSingle(),
-        sb.from("morning_routines").select("*").eq("user_id", USER).eq("active", true).order("sort"),
+        sb.from("checklist_templates").select("*").eq("user_id", USER).order("sort_order"),
+        sb.from("checklist_completions").select("*").eq("date", today),
+        sb.from("morning_routines").select("*").eq("user_id", USER).eq("active", true).order("sort"),   // gone after one_today_01; the error is ignored
         sb.from("morning_marks").select("*").eq("date", today),
         sb.from("rulings_owed").select("*").is("answered_at", null).order("asked_at"),
         liveChecks(sb),
@@ -347,42 +528,115 @@ Deno.serve(async (req: Request) => {
         sb.from("desk_items").select("id, kind, text, source, done, created_at").in("box_id", ["c9ec85f4-c2e2-4294-bfe5-7b500e905eae", "daf7faf0-936f-4e21-aeca-7196b9c31a84"]).eq("done", false),
         sb.from("content_calendar").select("id, title, platform, status, scheduled_for, campaign, pillar, metadata").eq("user_id", USER).neq("status", "archived").gt("scheduled_for", today).lte("scheduled_for", addDays(today, 14)).order("scheduled_for"),
         sb.from("content_calendar").select("id, campaign, pillar, status, metadata").eq("user_id", USER).eq("status", "draft").is("scheduled_for", null),
+        sb.from("desk_boxes").select("id, title, why, deadline, position").eq("archived", false).order("position"),
+        sb.from("desk_items").select("id, box_id, text, detail, done, due, kind, options, choice, linear_ref, parent_item_id, position").eq("done", false).order("position"),
+        sb.from("projects").select("id, title, due_ymd, status"),
+        sb.from("project_moves").select("id, project_id, title, why, stage, target_ymd, status").neq("status", "done").order("stage"),
+        sb.from("medications").select("id, name, dose, timing, active").eq("active", true).order("name"),
+        sb.from("med_log").select("medication_id, med_name, taken_at").eq("date", today),
+        sb.from("calendar_today_cache").select("id, event_id, summary, start_at, end_at, all_day, location, html_link").eq("event_date", today).order("start_at"),
+        linearKey(sb).then(async (k) => { if (!k) return { rows: [], error: "no key" }; try { return { rows: await linearOpen(k), error: null }; } catch (e) { return { rows: [], error: String(e).slice(0, 120) }; } }),
       ]);
       const hubCards = new Map<number, any>();
       const hubContent = hub.data?.content || null;
       for (const c of (hubContent?.cards || [])) hubCards.set(Number(c.day), c);
-      const routines = routinesQ.data ?? [];
-      const marks = new Map<string, any>();
-      for (const m of (marksQ.data ?? [])) marks.set(m.routine_id, m);
-      const wd = dow(today);
-      const todaysRoutines = routines.filter((r: any) => (r.days || []).includes(wd) && (!r.starts_on || r.starts_on <= today) && (!r.ends_on || r.ends_on >= today));
+      const comps = new Map<string, any>();
+      for (const c of (compQ.data ?? [])) comps.set(c.template_id, c);
+      const boxes = boxesQ.data ?? []; const boxById = new Map<string, any>(); for (const b of boxes) boxById.set(b.id, b);
+      const projects = projectsQ.data ?? []; const projById = new Map<string, any>(); for (const p of projects) projById.set(p.id, p);
+      const items = (itemsQ.data ?? []).filter((it: any) => it.kind !== "note" && boxById.has(it.box_id));
+      const moves = movesQ.data ?? [];
+      const meds = medsQ.data ?? [];
+      const medLog = medLogQ.data ?? [];
+      const linear: any[] = lkey.rows; const linearError: string | null = lkey.error;
+
+      // ---- the routines of today: the one table (plus the legacy Morning rows until the migration lands)
+      const templates = (tplQ.data ?? []).filter((t: any) => !t.paused);
+      const runsOn = (t: any, day: string, wdi: number) => {
+        if (t.starts_on && t.starts_on > day) return false;
+        if (t.ends_on && t.ends_on < day) return false;
+        if (Array.isArray(t.days) && t.days.length) return t.days.map(Number).includes(wdi);
+        if (t.cadence === "as_needed") return false;
+        if (t.cadence === "weekly") return wdi === 4;   // no days named: Thursday, the week's anchor day
+        return true;
+      };
+      const todaysTemplates = templates.filter((t: any) => runsOn(t, today, wd));
+      const legacyRoutines = legacyRoutinesQ.error ? [] : (legacyRoutinesQ.data ?? []);
+      const legacyMarks = new Map<string, any>(); for (const m of (legacyMarksQ.error ? [] : (legacyMarksQ.data ?? []))) legacyMarks.set(m.routine_id, m);
+      const legacyToday = legacyRoutines.filter((r: any) => (r.days || []).includes(wd) && (!r.starts_on || r.starts_on <= today) && (!r.ends_on || r.ends_on >= today));
+
+      // ---- content: today and the past (behind), then ahead (later)
       const content = await contentCards(sb, today, hubCards, true);
-      const cutoff = addDays(today, -BEHIND_DAYS);
+      const contentAhead = await contentCards(sb, today, hubCards, false, undefined, { from: today, to: later_to });
+
+      // ---- the three buckets
       const sitting: Card[] = [];
       const behindMap = new Map<string, any>();
-      for (const c of content) {
-        if (c.day >= cutoff) sitting.push(c);
-        else {
-          const k = c.campaign || "no campaign";
-          if (!behindMap.has(k)) behindMap.set(k, { campaign: k, door: c.door, count: 0, from: c.day, to: c.day, cards: [] });
-          const g = behindMap.get(k); g.count++; g.to = c.day; g.cards.push(c);
-        }
-      }
-      for (const r of todaysRoutines) sitting.push(routineCard(r, marks.get(r.id), today));
+      const laterMap = new Map<string, Card[]>();
+      const behindPut = (key: string, kind: string, label: string, door: string | null, c: Card) => {
+        if (!behindMap.has(key)) behindMap.set(key, { key, kind, campaign: label, label, door, count: 0, from: c.day, to: c.day, cards: [] });
+        const g = behindMap.get(key); g.count++; if (c.day < g.from) g.from = c.day; if (c.day > g.to) g.to = c.day; g.cards.push(c);
+      };
+      const laterPut = (c: Card) => { if (!laterMap.has(c.day)) laterMap.set(c.day, []); laterMap.get(c.day)!.push(c); };
+
+      for (const c of content) { if (c.day === today) sitting.push(c); else if (c.day < today) behindPut("campaign:" + (c.campaign || "none"), "campaign", c.campaign || "no campaign", c.door, c); }
+      for (const c of contentAhead) laterPut(c);
+      for (const t of todaysTemplates) sitting.push(checklistCard(t, comps.get(t.id), today));
+      for (const r of legacyToday) sitting.push(routineCard(r, legacyMarks.get(r.id), today));
       for (const r of (rulingsQ.data ?? [])) sitting.push(rulingCard(r));
-      sitting.sort((a, b) => timeKey(a.time) - timeKey(b.time) || DOOR_ORDER.indexOf(a.door) - DOOR_ORDER.indexOf(b.door));
+      for (const it of items) {
+        if (!it.due) continue;
+        const c = itemCard(it, boxById.get(it.box_id), today);
+        if (it.due === today) sitting.push(c); else if (it.due < today) behindPut("box:" + it.box_id, "box", boxById.get(it.box_id)?.title || "a box", c.door, c); else if (it.due <= later_to) laterPut(c);
+      }
+      for (const m of moves) {
+        if (!m.target_ymd) continue;
+        const c = moveCard(m, projById.get(m.project_id), today);
+        if (m.target_ymd === today) sitting.push(c); else if (m.target_ymd < today) behindPut("project:" + m.project_id, "project", projById.get(m.project_id)?.title || "a project", "house", c); else if (m.target_ymd <= later_to) laterPut(c);
+      }
+      for (const i of linear) {
+        if ((i.state || "").toLowerCase() === "duplicate") continue;
+        const c = linearCard(i, today);
+        if (i.due === today || (!i.due && i.priority === 1)) sitting.push(c);
+        else if (i.due && i.due < today) behindPut("linear", "linear", "Linear", "house", c);
+        else if (i.due && i.due <= later_to) laterPut(c);
+      }
+      const medsByTiming = new Map<string, any[]>();
+      for (const m of meds) { if (m.timing === "weekly" && wd !== 4) continue; const k = m.timing || "on_waking"; if (!medsByTiming.has(k)) medsByTiming.set(k, []); medsByTiming.get(k)!.push(m); }
+      for (const k of MED_ORDER) if (medsByTiming.has(k)) sitting.push(medsCard(k, medsByTiming.get(k)!, medLog, today));
+      for (const ev of (calQ.data ?? [])) { if (ev.all_day && ev.start_at && ptDate(ev.start_at) !== today) continue; sitting.push(calendarCard(ev, today, now)); }
+
+      // the order of the day: block, then the clock, then the door; the blocks stay whole
+      sitting.sort((a, b) => BLOCKS.indexOf(a.block) - BLOCKS.indexOf(b.block) || timeKey(a.time) - timeKey(b.time) || DOOR_ORDER.indexOf(a.door) - DOOR_ORDER.indexOf(b.door));
+      const nextCard = sitting.find((c) => c.status === "open" && c.source !== "calendar") || null;
       const behind = [...behindMap.values()].sort((a, b) => b.to.localeCompare(a.to));
+      const later = [] as any[];
+      for (let i = 1; i <= LATER_DAYS; i++) {
+        const day = addDays(today, i);
+        const cards = (laterMap.get(day) || []).sort((a, b) => timeKey(a.time) - timeKey(b.time));
+        later.push({ date: day, dow: DOW[dow(day)], nice: niceDate(day), count: cards.length, label: cards[0] ? cards[0].what.slice(0, 48) : null, cards });
+      }
+
+      // ---- what has no day: neither today nor behind; counted so a door can say so
+      const undatedItems = items.filter((it: any) => !it.due && !it.parent_item_id);
+      const undatedByBox = boxes.map((b: any) => ({ id: b.id, title: b.title, door: doorOfBox(b.title), count: undatedItems.filter((it: any) => it.box_id === b.id).length })).filter((b: any) => b.count > 0);
+      const undatedMoves = moves.filter((m: any) => !m.target_ymd).length;
+      const undatedLinear = linear.filter((i: any) => !i.due && i.priority !== 1).length;
+      const undatedContent = undatedQ.data ?? [];
+      const undated: any = { total: undatedItems.length + undatedMoves + undatedLinear + undatedContent.length, items: undatedItems.length, moves: undatedMoves, linear: undatedLinear, content: undatedContent.length, doors: {}, boxes: undatedByBox };
+      for (const id of DOOR_ORDER) undated.doors[id] = undatedByBox.filter((b: any) => b.door === id).reduce((n: number, b: any) => n + b.count, 0) + undatedContent.filter((r: any) => doorOf(r) === id).length + (id === "house" ? undatedMoves + undatedLinear : 0);
 
       // the doors
       const ahead = aheadQ.data ?? [];
-      const undated = undatedQ.data ?? [];
       const opps = oppsQ.data ?? [];
       const doors = DOOR_ORDER.map((id) => {
         const site = live?.sites?.[id] || null;
         const nextRow = ahead.find((r: any) => doorOf(r) === id);
-        const undatedCount = undated.filter((r: any) => doorOf(r) === id).length;
+        const undatedCount = undatedContent.filter((r: any) => doorOf(r) === id).length;
         const openHere = sitting.filter((c) => c.door === id && c.status === "open").length;
-        const d: any = { id, name: DOORS[id], pill: { state: site && site.ok ? "ok" : "wait", label: site ? (site.ok ? "site live" : "site " + site.status) : "unchecked", url: site?.url || null }, next: null, numbers: [], quiet: null, links: [], today: openHere };
+        const laterHere = later.reduce((n, d) => n + d.cards.filter((c: Card) => c.door === id).length, 0);
+        const behindHere = behind.filter((g) => g.door === id).reduce((n, g) => n + g.count, 0);
+        const d: any = { id, name: DOORS[id], pill: { state: site && site.ok ? "ok" : "wait", label: site ? (site.ok ? "site live" : "site " + site.status) : "unchecked", url: site?.url || null }, next: null, numbers: [], quiet: null, links: [], today: openHere, later: laterHere, behind: behindHere, undated: undated.doors[id] || 0 };
         if (id === "wayofdad") {
           const day0 = hubContent?.day0 || null;
           const dayN = day0 ? Math.round((new Date(today + "T12:00:00Z").getTime() - new Date(day0 + "T12:00:00Z").getTime()) / 86400000) : null;
@@ -393,9 +647,9 @@ Deno.serve(async (req: Request) => {
             d.pill = { state: postedDay === today ? "ok" : "wait", label: postedDay === today ? "posted " + postedTime : "last post " + niceDate(postedDay), url: "https://bsky.app/profile/wayofdad.co" };
           }
           if (dayN != null) d.numbers.push({ label: "day", value: dayN + " of " + total });
-          const dmMark = todaysRoutines.find((r: any) => /dm/i.test(r.what)); const dm = dmMark ? marks.get(dmMark.id) : null;
-          const rpMark = todaysRoutines.find((r: any) => /repl/i.test(r.what)); const rp = rpMark ? marks.get(rpMark.id) : null;
-          d.numbers.push({ label: "DMs today", value: dm?.value ?? "not yet" }, { label: "replies today", value: rp?.value ?? "not yet" });
+          const dmCard = sitting.find((c) => c.source === "routine" && c.door === "wayofdad" && /dm/i.test(c.what));
+          const rpCard = sitting.find((c) => c.source === "routine" && c.door === "wayofdad" && /repl/i.test(c.what));
+          d.numbers.push({ label: "DMs today", value: dmCard?.value ?? "not yet" }, { label: "replies today", value: rpCard?.value ?? "not yet" });
           if (nextRow) d.next = "Tomorrow: " + pieceTitle(nextRow).replace(/^Day \d+: /, "") + ".";
           d.links.push({ label: "Everything Dad", href: "https://jerrunge.github.io/the-eddy/dad-b3ab3e/" }, { label: "Bluesky", href: "https://bsky.app/profile/wayofdad.co" }, { label: "X", href: "https://x.com/wayofdad" }, { label: "Instagram", href: "https://www.instagram.com/way.of.dad/" });
         }
@@ -403,7 +657,7 @@ Deno.serve(async (req: Request) => {
           const disc = opps.filter((o: any) => o.pillar === "fortify" && /discover/i.test(o.stage || "")).length;
           const dayc = opps.filter((o: any) => o.pillar === "fortify" && /^day/i.test(o.stage || "")).length;
           d.numbers.push({ label: "Discovery", value: disc }, { label: "Day", value: dayc });
-          const shoot = routines.find((r: any) => r.door === "fortify" && /^shoot/i.test(r.what) && r.starts_on && r.starts_on === r.ends_on);
+          const shoot = templates.find((t: any) => t.door === "fortify" && /^shoot/i.test(t.title) && t.starts_on && t.starts_on === t.ends_on) || legacyRoutines.find((r: any) => r.door === "fortify" && /^shoot/i.test(r.what) && r.starts_on && r.starts_on === r.ends_on);
           if (shoot && shoot.starts_on >= today) d.next = "Shoot " + niceDate(shoot.starts_on) + ". " + (nextRow ? "Then " + pieceTitle(nextRow) + " " + niceDate(nextRow.scheduled_for.slice(0, 10)) + "." : "");
           else if (nextRow) d.next = "Next: " + pieceTitle(nextRow) + ", " + niceDate(nextRow.scheduled_for.slice(0, 10)) + ".";
           if (undatedCount) d.numbers.push({ label: "staged, no day", value: undatedCount });
@@ -424,7 +678,7 @@ Deno.serve(async (req: Request) => {
         }
         if (id === "house") {
           const owed = sitting.filter((c) => c.source === "ruling" && c.status === "open").length;
-          d.numbers.push({ label: "rulings owed", value: owed });
+          d.numbers.push({ label: "rulings owed", value: owed }, { label: "with no day", value: undated.doors.house || 0 });
           if (!openHere && !nextRow) d.quiet = "Nothing dated for the house today.";
           d.links.push({ label: "RULINGS.md", href: "https://github.com/" + REPO + "/blob/main/RULINGS.md" }, { label: "NOW.md", href: "https://github.com/" + REPO + "/blob/main/NOW.md" });
         }
@@ -432,21 +686,23 @@ Deno.serve(async (req: Request) => {
         return d;
       });
 
-      // the week
+      // the week: today's open sitting, then each later day's dated things plus its routines
       const week = [] as any[];
       for (let i = 0; i < 7; i++) {
         const day = addDays(today, i);
-        const rows = i === 0 ? sitting.filter((c) => c.source === "content" && c.day === today) : ahead.filter((r: any) => r.scheduled_for.slice(0, 10) === day);
         const wdi = dow(day);
-        const rts = routines.filter((r: any) => (r.days || []).includes(wdi) && (!r.starts_on || r.starts_on <= day) && (!r.ends_on || r.ends_on >= day));
-        const special = rts.find((r: any) => r.starts_on && r.ends_on && r.starts_on === r.ends_on);
-        const titles = i === 0 ? rows.map((c) => c.what) : [...new Set(rows.map((r: any) => pieceTitle(r)))];
-        let label = special ? special.what : (titles[0] || (i === 0 ? (sitting.find((c) => c.status === "open") || {}).what || null : null));
+        const rts = templates.filter((t: any) => runsOn(t, day, wdi)).length + legacyRoutines.filter((r: any) => (r.days || []).includes(wdi) && (!r.starts_on || r.starts_on <= day) && (!r.ends_on || r.ends_on >= day)).length;
+        const special = templates.find((t: any) => t.starts_on && t.ends_on && t.starts_on === t.ends_on && t.starts_on === day) || legacyRoutines.find((r: any) => r.starts_on && r.ends_on && r.starts_on === r.ends_on && r.starts_on === day);
+        const DATED = new Set(["content", "work", "move", "linear", "ruling"]);
+        const dayCards = (i === 0 ? sitting.filter((c) => c.status === "open") : (later[i - 1]?.cards ?? [])).filter((c: Card) => DATED.has(c.source));
+        const lead = special ? (special.title || special.what) : (dayCards.find((c: Card) => c.source === "content" || c.source === "move" || c.source === "work")?.what || dayCards[0]?.what || null);
+        let label = lead ? String(lead) : null;
         if (label) label = label.replace(/^(Day \d+|Video \d+ of \d+)[:.]?\s*/i, (m) => m.trim().replace(/[:.]$/, "") + ": ").replace(/: $/, "");
-        week.push({ date: day, dow: DOW[wdi], count: (i === 0 ? sitting.filter((c) => c.status === "open").length : titles.length + rts.length), posts: titles.length, routines: rts.length, label: label ? label.slice(0, 48) : null });
+        week.push({ date: day, dow: DOW[wdi], count: dayCards.length, posts: dayCards.filter((c: Card) => c.source === "content").length, routines: i === 0 ? sitting.filter((c) => c.source === "routine").length : rts, label: label ? label.slice(0, 48) : null });
       }
 
-      return j({ date: today, nice_date: niceDate(today), now: ptNow(), sitting, behind, doors, week, routines_seeded: routines.length, text_ready: !!(await ghToken()), served_at: now }, headers);
+      const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total };
+      return j({ date: today, nice_date: niceDate(today), now: ptNow(), engine: "one-today v9", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, doors, week, counts, linear_error: linearError, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now }, headers);
     }
 
     if (body.op === "text") {
@@ -524,7 +780,17 @@ Deno.serve(async (req: Request) => {
 
       if (id.startsWith("routine:")) {
         const rid = id.slice(8);
-        const r = (await sb.from("morning_routines").select("*").eq("id", rid).maybeSingle()).data;
+        // the one table first; the Morning's own table only until one_today_01 lands
+        const t = (await sb.from("checklist_templates").select("*").eq("id", rid).maybeSingle()).data;
+        if (t) {
+          if (action === "undo" || action === "reopen") { await sb.from("checklist_completions").delete().eq("template_id", rid).eq("date", today); return j({ ok: true, card: checklistCard(t, null, today) }, headers); }
+          if (!["done", "skip", "hold"].includes(action)) return j({ error: "unknown action for routine" }, headers, 400);
+          const value = body.value != null ? String(body.value).slice(0, 80) : null;
+          const row = await writeCompletion(sb, rid, today, now, action !== "done", value, source);
+          return j({ ok: true, card: checklistCard(t, row, today) }, headers);
+        }
+        const legacy = await sb.from("morning_routines").select("*").eq("id", rid).maybeSingle();
+        const r = legacy.error ? null : legacy.data;
         if (!r) return j({ error: "no such routine" }, headers, 404);
         if (action === "undo" || action === "reopen") { await sb.from("morning_marks").delete().eq("routine_id", rid).eq("date", today); return j({ ok: true, card: routineCard(r, null, today) }, headers); }
         if (!["done", "skip", "hold"].includes(action)) return j({ error: "unknown action for routine" }, headers, 400);
@@ -533,6 +799,73 @@ Deno.serve(async (req: Request) => {
         if (u.error) return j({ error: u.error.message }, headers, 500);
         return j({ ok: true, card: routineCard(r, mark, today) }, headers);
       }
+
+      if (id.startsWith("item:")) {
+        const iid = id.slice(5);
+        const it = (await sb.from("desk_items").select("*").eq("id", iid).maybeSingle()).data;
+        if (!it) return j({ error: "no such item" }, headers, 404);
+        const box = (await sb.from("desk_boxes").select("id, title").eq("id", it.box_id).maybeSingle()).data;
+        let patch: any = { updated_at: now };
+        if (action === "done") patch = { done: true, done_at: now, updated_at: now };
+        else if (action === "hold" || action === "skip") patch = { due: addDays(today, Math.max(1, Number(body.value) || 1)), updated_at: now };
+        else if (action === "undo" || action === "reopen") patch = { done: false, done_at: null, due: it.done ? it.due : today, updated_at: now };
+        else if (action === "ruled" && it.kind === "decision") patch = { choice: String(body.choice ?? body.text ?? "").slice(0, 200), done: true, done_at: now, updated_at: now };
+        else return j({ error: "unknown action for item" }, headers, 400);
+        const u = await sb.from("desk_items").update(patch).eq("id", iid).select("*").single();
+        if (u.error) return j({ error: u.error.message }, headers, 500);
+        const card = itemCard(u.data, box, today);
+        if ((action === "hold" || action === "skip") && card.day > today) { card.status = "held"; card.held_until = card.day; }
+        return j({ ok: true, card }, headers);
+      }
+
+      if (id.startsWith("move:")) {
+        const mid = id.slice(5);
+        const m = (await sb.from("project_moves").select("*").eq("id", mid).maybeSingle()).data;
+        if (!m) return j({ error: "no such move" }, headers, 404);
+        const project = (await sb.from("projects").select("id, title").eq("id", m.project_id).maybeSingle()).data;
+        let patch: any;
+        if (action === "done") patch = { status: "done" };
+        else if (action === "hold" || action === "skip") patch = { target_ymd: addDays(today, Math.max(1, Number(body.value) || 1)) };
+        else if (action === "undo" || action === "reopen") patch = { status: "open", target_ymd: m.status === "done" ? m.target_ymd : today };
+        else return j({ error: "unknown action for move" }, headers, 400);
+        const u = await sb.from("project_moves").update(patch).eq("id", mid).select("*").single();
+        if (u.error) return j({ error: u.error.message }, headers, 500);
+        const card = moveCard(u.data, project, today);
+        if ((action === "hold" || action === "skip") && card.day > today) { card.status = "held"; card.held_until = card.day; }
+        return j({ ok: true, card }, headers);
+      }
+
+      if (id.startsWith("linear:")) {
+        const lid = id.slice(7);
+        const key = await linearKey(sb);
+        if (!key) return j({ error: "no Linear key on the platform" }, headers, 503);
+        let rows: any[] = []; try { rows = await linearOpen(key); } catch (e) { return j({ error: String(e).slice(0, 160) }, headers, 502); }
+        const i = rows.find((x) => x.id === lid);
+        if (action === "done") { await linearSetState(key, lid, "completed"); return j({ ok: true, card: Object.assign(linearCard(i || { id: lid, title: "" }, today), { status: "done" }) }, headers); }
+        if (action === "hold" || action === "skip") { const due = addDays(today, Math.max(1, Number(body.value) || 1)); await linearSetDue(key, lid, due); return j({ ok: true, card: Object.assign(linearCard(Object.assign({}, i || { id: lid, title: "" }, { due }), today), { status: "held", held_until: due }) }, headers); }
+        if (action === "undo" || action === "reopen") { await linearSetState(key, lid, "unstarted"); if (i && i.due !== today) await linearSetDue(key, lid, today); return j({ ok: true, card: linearCard(Object.assign({}, i || { id: lid, title: "" }, { due: today }), today) }, headers); }
+        return j({ error: "unknown action for a Linear issue" }, headers, 400);
+      }
+
+      if (id.startsWith("med:")) {
+        const timing = id.slice(4);
+        const meds = ((await sb.from("medications").select("id, name, dose, timing, active").eq("active", true).eq("timing", timing)).data ?? []) as any[];
+        if (!meds.length) return j({ error: "no meds in that window" }, headers, 404);
+        const wanted = body.post_id ? meds.filter((m) => m.id === String(body.post_id)) : meds;
+        if (action === "done") {
+          for (const m of wanted) {
+            await sb.from("med_log").delete().eq("date", today).eq("med_name", m.name);
+            const u = await sb.from("med_log").insert({ user_id: USER, date: today, med_name: m.name, taken_at: now, medication_id: m.id });
+            if (u.error) return j({ error: u.error.message }, headers, 500);
+          }
+        } else if (action === "undo" || action === "reopen") {
+          for (const m of wanted) await sb.from("med_log").delete().eq("date", today).eq("med_name", m.name);
+        } else return j({ error: "unknown action for meds" }, headers, 400);
+        const log = (await sb.from("med_log").select("medication_id, med_name, taken_at").eq("date", today)).data ?? [];
+        return j({ ok: true, card: medsCard(timing, meds, log, today) }, headers);
+      }
+
+      if (id.startsWith("calendar:")) return j({ error: "a calendar event is not tapped here" }, headers, 400);
 
       if (id.startsWith("ruling:")) {
         const rid = id.slice(7);
