@@ -404,12 +404,20 @@ function medsCard(timing: string, meds: any[], log: any[], today: string): Card 
     copy: [], photo: null, kit: null, taps, links: [], status: left.length === 0 ? "done" : "open", posts, timing, day: today,
   };
 }
+// the last day an all-day event covers, when that is after today; end_at is the exclusive date at UTC midnight
+function allDayThrough(endIso: string | null, today: string): string | null {
+  if (!endIso) return null;
+  const last = new Date(endIso.slice(0, 10) + "T12:00:00Z"); last.setUTCDate(last.getUTCDate() - 1);
+  if (last.toISOString().slice(0, 10) <= today) return null;
+  return "through " + last.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" });
+}
 function calendarCard(ev: any, today: string, nowIso: string): Card {
   const start = ev.start_at ? ptClock(ev.start_at) : null;
-  const over = ev.end_at ? ev.end_at < nowIso : false;
+  // an all-day event is never over before its day is: its end_at read as an instant is the afternoon before
+  const over = ev.all_day ? false : ev.end_at ? ev.end_at < nowIso : false;
   return {
     id: "calendar:" + (ev.id || ev.event_id || ev.summary), source: "calendar", time: ev.all_day ? "all day" : (start || "later"), block: ev.all_day ? "Wake" : blockOf(start), door: null,
-    what: ev.summary, why: [ev.location || null, ev.end_at && !ev.all_day ? "until " + ptClock(ev.end_at) : null].filter(Boolean).join(" · ") || null,
+    what: ev.summary, why: [ev.location || null, ev.end_at && !ev.all_day ? "until " + ptClock(ev.end_at) : null, ev.all_day ? allDayThrough(ev.end_at, today) : null].filter(Boolean).join(" · ") || null,
     copy: [], photo: null, kit: null, taps: [], links: ev.html_link ? [{ label: "Open", href: ev.html_link }] : [], status: over ? "done" : "open", day: today,
   };
 }
@@ -604,7 +612,9 @@ Deno.serve(async (req: Request) => {
       const medsByTiming = new Map<string, any[]>();
       for (const m of meds) { if (m.timing === "weekly" && wd !== 4) continue; const k = m.timing || "on_waking"; if (!medsByTiming.has(k)) medsByTiming.set(k, []); medsByTiming.get(k)!.push(m); }
       for (const k of MED_ORDER) if (medsByTiming.has(k)) sitting.push(medsCard(k, medsByTiming.get(k)!, medLog, today));
-      for (const ev of (calQ.data ?? [])) { if (ev.all_day && ev.start_at && ptDate(ev.start_at) !== today) continue; sitting.push(calendarCard(ev, today, now)); }
+      // the cache files an all-day event under every Pacific day it covers (event_date is the truth); its start_at is UTC midnight,
+      // so reading that in Pacific lands on the evening before and hid every all-day event from today
+      for (const ev of (calQ.data ?? [])) sitting.push(calendarCard(ev, today, now));
 
       // the order of the day: block, then the clock, then the door; the blocks stay whole
       sitting.sort((a, b) => BLOCKS.indexOf(a.block) - BLOCKS.indexOf(b.block) || timeKey(a.time) - timeKey(b.time) || DOOR_ORDER.indexOf(a.door) - DOOR_ORDER.indexOf(b.door));
