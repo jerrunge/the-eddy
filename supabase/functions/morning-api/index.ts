@@ -1,4 +1,4 @@
-// morning-api v9: THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
+// morning-api v11: THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
 // shows what he is supposed to do just today, and no two tabs disagreeing). One composition
 // of the day for every surface: the Chart House's Morning room, the 29:11 face on the phone,
 // the iPad, the Mac, the Watch, the menu bar, Siri. Every renderer reads this; every tap
@@ -20,7 +20,8 @@
 // bearer for the Chart House's own Pages function. No anon path.
 //
 // Ops (POST, json):
-//   morning  { date? }                          -> { date, sitting:[card], later:[day], behind:[group], undated, doors:[door], week:[day], counts, served_at }
+//   morning  { date?, now_min? }                -> { date, now, now_min, clock, next_rule, next_id, sitting:[card], later:[day], behind:[group], undated, doors:[door], week:[day], counts, served_at }
+//            now_min (0 to 1439) is a test clock, honored only for the service role; a device token's is ignored.
 //   tap      { card_id, action, post_id?, post_ids?, url?, value?, choice?, text?, source? } -> { ok, card }
 //            card ids: content:<id> routine:<id> ruling:<id> item:<id> move:<id> linear:<id> med:<timing> calendar:<id>
 //            actions: posted sent done hold skip ruled undo reopen (done on a med card takes post_id = the medication)
@@ -34,7 +35,16 @@
 //           copy:[{label, platforms, text}], photo:{path, alt}|null, kit:{to, from, when, how}|null,
 //           taps:[{action, label, post_id?}], status, posts:[{id, platform, status, url}] (content; the meds
 //           of a window on a meds card), options:[{key,label}] (ruling), links:[{label, href}], day,
-//           overdue_since?, campaign? (content), box? (work), project? (move), anchor? cadence? rungs? (routine) }
+//           overdue_since?, campaign? (content), box? (work), project? (move), anchor? cadence? rungs? (routine),
+//           due_min, until_min }
+//
+// The next card, by the clock (RULINGS 2026-09-14, "the next thing on every screen"): walk the sitting in
+// its order and skip calendar events and anything not open. The first card with no clock, or whose clock
+// has not passed, is next. due_min is the card's own clock in minutes since Pacific midnight, null when the
+// time shown is a placeholder (rulings, work, moves, Linear, a door's default hour, a routine written
+// "later"). until_min is due_min + 15, or the end of the routine's window when that is later; a card has
+// passed only when now_min > until_min. When every open card has passed, next is the one that passed most
+// recently. The Chart House and 29:11 run the same few lines on until_min against the Pacific clock.
 //
 // Floors, not ceilings. Nothing here counts him, caps him, or hides a row from him: overdue rows
 // older than a week travel in `behind`, grouped by campaign, every card intact.
@@ -90,10 +100,45 @@ function timeKey(t: string | null | undefined) {
   let h = Number(m[1]) % 12; if (m[3].toLowerCase() === "pm") h += 12;
   return h * 60 + Number(m[2] || 0);
 }
-function slotTime(meta: any, door: string) {
+// the clock on the row itself (slot before when), or null; the door's default hour is not a clock on the row
+function slotClock(meta: any): string | null {
   const s = meta?.slot || meta?.when || "";
   const m = String(s).match(/(\d{1,2}(?::\d{2})?\s*[ap]m)/i);
-  return m ? m[1].replace(/\s+/g, "").toLowerCase() : DOOR_TIME[door];
+  return m ? m[1].replace(/\s+/g, "").toLowerCase() : null;
+}
+function slotTime(meta: any, door: string) { return slotClock(meta) ?? DOOR_TIME[door]; }
+
+// ----- the next card, by the clock -----
+const NEXT_GRACE_MIN = 15;
+// "7:45am" -> 465; anything that is not a clock -> null
+function minOf(t: string | null | undefined): number | null { const k = timeKey(t); return k < 9998 ? k : null; }
+// "12:00:00" or "12:00" -> 720
+function hmsMin(t: string | null | undefined): number | null {
+  const m = String(t || "").match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+function untilOf(due: number | null, windowEnd?: string | null): number | null {
+  if (due == null) return null;
+  const end = windowEnd ? hmsMin(windowEnd) : null;
+  return Math.max(due + NEXT_GRACE_MIN, end != null && end > due ? end : 0);
+}
+// whole minutes since Pacific midnight, seconds dropped
+function ptMinute(): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value || 0) % 24;
+  const m = Number(parts.find((p) => p.type === "minute")?.value || 0);
+  return h * 60 + m;
+}
+// The sitting is already in the order of the day. The first open, non-calendar card with no clock or a
+// clock not yet passed; else the open card that passed most recently (earliest in order on a tie); else null.
+function pickNext(sitting: any[], nowMin: number): any | null {
+  const open = sitting.filter((c) => c.status === "open" && c.source !== "calendar");
+  if (!open.length) return null;
+  const hit = open.find((c) => c.until_min == null || nowMin <= c.until_min);
+  if (hit) return hit;
+  let best = open[0];
+  for (const c of open) if (c.until_min > best.until_min) best = c;
+  return best;
 }
 function doorOf(row: any): string {
   const c = String(row.campaign || "");
@@ -222,11 +267,15 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
     if (m.plan_page) links.push({ label: "The plan page", href: "https://github.com/" + REPO + "/blob/main/" + m.plan_page });
     if (m.plan_artifact || m.show_artifact) links.push({ label: "The plan", href: m.plan_artifact || m.show_artifact });
     if (m.vault_path) links.push({ label: "The file", href: "https://github.com/" + REPO + "/blob/main/" + m.vault_path });
+    const clock = slotClock(m);
+    const due = clock ? minOf(clock) : null;
     cards.push({
       id: "content:" + lead.id,
       source: "content",
       time: slotTime(m, door),
       block: blockOf(slotTime(m, door)),
+      due_min: due,
+      until_min: untilOf(due),
       door,
       what: pieceTitle(lead),
       why: m.why || null,
@@ -254,6 +303,8 @@ function routineCard(r: any, mark: any, today: string): Card {
     source: "routine",
     time: r.time || DOOR_TIME[r.door],
     block: blockOf(r.time || DOOR_TIME[r.door]),
+    due_min: r.time ? minOf(r.time) : null,
+    until_min: untilOf(r.time ? minOf(r.time) : null),
     door: r.door,
     what: r.what,
     why: r.why || null,
@@ -281,6 +332,8 @@ function rulingCard(r: any): Card {
     source: "ruling",
     time: "8:20am",
     block: "Wake",
+    due_min: null,     // 8:20am is a placeholder, not a clock
+    until_min: null,
     door: r.door || "house",
     what: r.question,
     why: r.context || null,
@@ -306,7 +359,7 @@ const ANCHOR_NAME: Record<string, string> = { wake: "first thing", levo_gap_clos
 const MED_TIME: Record<string, string> = { on_waking: "7:00am", with_breakfast: "8:30am", pre_gym: "2:00pm", bedtime: "9:30pm", weekly: "9:00am" };
 const MED_LABEL: Record<string, string> = { on_waking: "On waking", with_breakfast: "With breakfast", pre_gym: "Before the gym", bedtime: "Bedtime", weekly: "Thursday, weekly" };
 const MED_ORDER = ["on_waking", "with_breakfast", "weekly", "pre_gym", "bedtime"];
-const WORK_TIME = "9:00am";     // a dated thing with no clock time sits at the top of the work morning
+const WORK_TIME = "9:00am";     // a dated thing with no clock time sits at the top of the work morning (a placeholder: due_min null)
 const LATER_DAYS = 7;
 // The block a clock time falls in, the app's own edges (Wake before 11, Midday before 5, Evening before 9, then Close).
 const BLOCKS = ["Wake", "Midday", "Evening", "Close", "Any time"];
@@ -336,10 +389,12 @@ function ago(day: string, today: string): string { const d = daysBetween(day, to
 // copy, ask, links; the body's thirty carry the rungs. Both are the same card.
 function checklistCard(t: any, comp: any, today: string): Card {
   const time = t.time && t.time !== "later" ? t.time : (clockOf(t.window_start) || ANCHOR_TIME[t.anchor] || "later");
+  // the row's own clock: its time, else its window, else its anchor's hour; a routine written "later" has none
+  const due = t.time && t.time !== "later" ? minOf(t.time) : t.window_start ? hmsMin(t.window_start) : t.time === "later" ? null : minOf(ANCHOR_TIME[t.anchor]);
   const status = !comp ? "open" : comp.skipped ? "skipped" : "done";
   const copy = Array.isArray(t.copy) ? t.copy : (t.copy ? [t.copy] : []);
   return {
-    id: "routine:" + t.id, source: "routine", time, block: blockOf(time, t.anchor), door: t.door || null,
+    id: "routine:" + t.id, source: "routine", time, block: blockOf(time, t.anchor), due_min: due, until_min: untilOf(due, t.window_end), door: t.door || null,
     what: t.title, why: t.why || null, copy, photo: null, kit: null,
     taps: [{ action: "done", label: "Done" }, { action: "skip", label: "Skip" }],
     ask: t.ask || null, links: Array.isArray(t.links) ? t.links : [],
@@ -356,7 +411,7 @@ function itemCard(it: any, box: any, today: string): Card {
   if (url) links.push({ label: "Open", href: url[0] });
   if (it.linear_ref && /^https?:/.test(it.linear_ref)) links.push({ label: "In Linear", href: it.linear_ref });
   return {
-    id: "item:" + it.id, source: "work", time: WORK_TIME, block: "Wake", door: doorOfBox(box?.title || ""),
+    id: "item:" + it.id, source: "work", time: WORK_TIME, block: "Wake", due_min: null, until_min: null, door: doorOfBox(box?.title || ""),
     what: it.text, why: it.detail && !url ? it.detail : (day && day < today ? ago(day, today) + " · " + (box?.title || "") : (box?.title || null)),
     copy: [], photo: null, kit: null,
     taps: [{ action: "done", label: "Done" }, { action: "hold", label: "Tomorrow" }, { action: "hold", label: "Next week", value: "7" }],
@@ -368,7 +423,7 @@ function itemCard(it: any, box: any, today: string): Card {
 function moveCard(m: any, project: any, today: string): Card {
   const day = m.target_ymd;
   return {
-    id: "move:" + m.id, source: "move", time: WORK_TIME, block: "Wake", door: "house",
+    id: "move:" + m.id, source: "move", time: WORK_TIME, block: "Wake", due_min: null, until_min: null, door: "house",
     what: m.title, why: m.why || (project ? "Step " + (m.stage ?? "") + " of " + project.title : null),
     copy: [], photo: null, kit: null,
     taps: [{ action: "done", label: "Done" }, { action: "hold", label: "Tomorrow" }],
@@ -381,7 +436,7 @@ function linearCard(i: any, today: string): Card {
   const p = i.priority;
   const why = [i.project ? String(i.project).replace(/^[^\w]+/, "").trim() : null, i.state || null, p === 1 ? "urgent" : p === 2 ? "high" : null, day && day < today ? ago(day, today) : null].filter(Boolean).join(" · ");
   return {
-    id: "linear:" + i.id, source: "linear", time: WORK_TIME, block: "Wake", door: "house",
+    id: "linear:" + i.id, source: "linear", time: WORK_TIME, block: "Wake", due_min: null, until_min: null, door: "house",
     what: (i.key ? i.key + " " : "") + i.title, why: why || null, copy: [], photo: null, kit: null,
     taps: [{ action: "done", label: "Done in Linear" }, { action: "hold", label: "Tomorrow" }],
     links: i.url ? [{ label: "Open in Linear", href: i.url }] : [], status: "open", priority: p ?? null, linear_key: i.key || null, team_id: i.team_id || null,
@@ -398,7 +453,7 @@ function medsCard(timing: string, meds: any[], log: any[], today: string): Card 
   if (left.length > 1) taps.push({ action: "done", label: "Taken, all " + left.length });
   for (const p of left) taps.push({ action: "done", label: "Taken: " + p.platform, post_id: p.id });
   return {
-    id: "med:" + timing, source: "meds", time: MED_TIME[timing] || "later", block: blockOf(MED_TIME[timing]), door: null,
+    id: "med:" + timing, source: "meds", time: MED_TIME[timing] || "later", block: blockOf(MED_TIME[timing]), due_min: minOf(MED_TIME[timing]), until_min: untilOf(minOf(MED_TIME[timing])), door: null,
     what: "Meds, " + (MED_LABEL[timing] || timing).toLowerCase() + ": " + meds.map((m) => m.name).join(", "),
     why: left.length === 0 ? "All taken." : left.length === meds.length ? null : left.length + " of " + meds.length + " still due.",
     copy: [], photo: null, kit: null, taps, links: [], status: left.length === 0 ? "done" : "open", posts, timing, day: today,
@@ -416,7 +471,8 @@ function calendarCard(ev: any, today: string, nowIso: string): Card {
   // an all-day event is never over before its day is: its end_at read as an instant is the afternoon before
   const over = ev.all_day ? false : ev.end_at ? ev.end_at < nowIso : false;
   return {
-    id: "calendar:" + (ev.id || ev.event_id || ev.summary), source: "calendar", time: ev.all_day ? "all day" : (start || "later"), block: ev.all_day ? "Wake" : blockOf(start), door: null,
+    id: "calendar:" + (ev.id || ev.event_id || ev.summary), source: "calendar", time: ev.all_day ? "all day" : (start || "later"), block: ev.all_day ? "Wake" : blockOf(start),
+    due_min: ev.all_day ? null : minOf(start), until_min: null, door: null,
     what: ev.summary, why: [ev.location || null, ev.end_at && !ev.all_day ? "until " + ptClock(ev.end_at) : null, ev.all_day ? allDayThrough(ev.end_at, today) : null].filter(Boolean).join(" · ") || null,
     copy: [], photo: null, kit: null, taps: [], links: ev.html_link ? [{ label: "Open", href: ev.html_link }] : [], status: over ? "done" : "open", day: today,
   };
@@ -618,7 +674,12 @@ Deno.serve(async (req: Request) => {
 
       // the order of the day: block, then the clock, then the door; the blocks stay whole
       sitting.sort((a, b) => BLOCKS.indexOf(a.block) - BLOCKS.indexOf(b.block) || timeKey(a.time) - timeKey(b.time) || DOOR_ORDER.indexOf(a.door) - DOOR_ORDER.indexOf(b.door));
-      const nextCard = sitting.find((c) => c.status === "open" && c.source !== "calendar") || null;
+      // the clock: a test clock for the service role only, else Pacific now on today, else the edge of the day
+      let nowMin: number; let clock: "pacific" | "test" = "pacific";
+      if (viaService && Number.isInteger(body.now_min) && body.now_min >= 0 && body.now_min <= 1439) { nowMin = body.now_min; clock = "test"; }
+      else if (today === ptToday()) nowMin = ptMinute();
+      else nowMin = today > ptToday() ? 0 : 1439;
+      const nextCard = pickNext(sitting, nowMin);
       const behind = [...behindMap.values()].sort((a, b) => b.to.localeCompare(a.to));
       const later = [] as any[];
       for (let i = 1; i <= LATER_DAYS; i++) {
@@ -712,7 +773,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total };
-      return j({ date: today, nice_date: niceDate(today), now: ptNow(), engine: "one-today v9", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, doors, week, counts, linear_error: linearError, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now }, headers);
+      return j({ date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", engine: "one-today v11", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, doors, week, counts, linear_error: linearError, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now }, headers);
     }
 
     if (body.op === "text") {
