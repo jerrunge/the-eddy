@@ -33,6 +33,7 @@
   --ok:#7FD0A0; --ok-soft:#173224; --ask:#E3C36A; --ask-soft:#3A3116; --stale:#D0A0A0; --stale-soft:#3A2626;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{margin:0;background:var(--ground);color:var(--text);font-family:"Public Sans",system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
 a{color:inherit}
 .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
@@ -201,7 +202,7 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
       '<div class="nav"><button type="button" id="prev">&larr; prev</button><button type="button" id="next">next &rarr;</button><button type="button" id="reset">today</button><button type="button" id="done" class="done">Done</button></div></div>'+
       '<div class="post"><div class="lab"><span class="kicker" id="x-lab"></span><button type="button" class="copy" data-for="x">Copy</button></div><p id="x-text"></p></div>'+
       '<div><dl class="meta"><dt>Photo</dt><dd id="m-photo"></dd><dt>Where</dt><dd id="m-plat"></dd><dt>Alt</dt><dd class="q" id="m-alt"></dd></dl>'+
-      '<div class="post" id="ig-box" style="margin-top:12px"><div class="lab"><span class="kicker" id="ig-lab"></span><button type="button" class="copy" data-for="ig">Copy</button></div><p id="ig-text"></p></div></div>'+
+      '<div class="post" id="ig-box" style="margin-top:12px"><div class="lab"><span class="kicker" id="ig-lab"></span><button type="button" class="copy" data-for="ig">Copy</button></div><p id="ig-text"></p></div><div class="post" id="reply-box" style="margin-top:12px" hidden><div class="lab"><span class="kicker" id="reply-lab"></span><button type="button" class="copy" data-for="reply">Copy</button></div><p id="reply-text"></p></div></div>'+
       '<div class="tomorrow"><span id="tomorrow"></span><a href="'+esc(c.plan_url)+'">The whole plan, with every Why &rarr;</a></div></section>';
     h += '<div class="doors">';
     (c.doors||[]).forEach(function(d,i){
@@ -226,6 +227,7 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
       $('today-frame').textContent = k.frame; $('x-text').textContent = k.x;
       $('m-photo').textContent = k.photo; $('m-plat').textContent = k.platforms; $('m-alt').textContent = k.alt; $('x-lab').textContent = c.x_label||''; $('ig-lab').textContent = c.ig_label||'';
       var ig = $('ig-box'); if (k.ig){ ig.hidden=false; $('ig-text').textContent=k.ig; } else { ig.hidden=true; }
+      var rb = $('reply-box'); if (k.reply){ rb.hidden=false; $('reply-text').textContent=k.reply; $('reply-lab').textContent=c.reply_label||''; } else { rb.hidden=true; }
       var n = cards[idx+1];
       $('tomorrow').textContent = n ? ('Tomorrow: Day '+n.day+', '+n.frame+', photo '+String(n.photo).split(' (')[0]+'.') : 'Day 14: ten minutes on Sunday and three numbers to homebase.';
       $('prev').disabled = idx===0; $('next').disabled = idx===cards.length-1;
@@ -245,7 +247,7 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
     var toast=$('toast'), tt;
     app.querySelectorAll('.copy').forEach(function(b){
       b.onclick=function(){
-        var k=cards[idx]; var text = b.getAttribute('data-for')==='x' ? k.x : k.ig;
+        var k=cards[idx]; var f=b.getAttribute('data-for'); var text = f==='x' ? k.x : f==='reply' ? k.reply : k.ig;
         var done=function(){ b.textContent='Copied'; b.setAttribute('data-done','1'); toast.classList.add('on'); clearTimeout(tt); tt=setTimeout(function(){toast.classList.remove('on'); b.textContent='Copy'; b.removeAttribute('data-done');},1400); };
         var fallback=function(){ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); };
         if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ fallback(); done(); }); } else { fallback(); done(); }
