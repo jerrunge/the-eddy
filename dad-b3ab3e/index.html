@@ -231,8 +231,10 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
       var xb = $('extras-box'), hx = '';
       (k.extras||[]).forEach(function(it, n){
         hx += '<div class="post" style="margin-top:12px"><div class="kicker">'+esc(c.extras_label||'')+'</div><b>'+esc(it.title)+'</b>';
+        if (it.photo) hx += '<p style="color:var(--soft);font-size:.9rem;margin:4px 0 0">'+esc(it.photo)+'</p>';
         if (it.x) hx += '<div class="lab"><span class="kicker">'+esc(c.x_label||'')+'</span><button type="button" class="copy" data-extra="'+n+'" data-kind="x">Copy</button></div><p>'+esc(it.x)+'</p>';
         if (it.ig) hx += '<div class="lab"><span class="kicker">'+esc(it.kind==='reel' ? (c.reel_label||'') : (c.ig_label||''))+'</span><button type="button" class="copy" data-extra="'+n+'" data-kind="ig">Copy</button></div><p>'+esc(it.ig)+'</p>';
+        if (it.alt) hx += '<div class="lab"><span class="kicker">Alt</span><button type="button" class="copy" data-extra="'+n+'" data-kind="alt">Copy</button></div><p style="color:var(--soft)">'+esc(it.alt)+'</p>';
         hx += '</div>';
       });
       xb.innerHTML = hx;
@@ -264,7 +266,7 @@ section.plain .lede{margin:0 0 14px;color:var(--soft);max-width:66ch}
     $('extras-box').onclick = function(ev){
       var b = ev.target.closest('button[data-extra]'); if (!b) return;
       var it = (cards[idx].extras||[])[+b.getAttribute('data-extra')]; if (!it) return;
-      var text = b.getAttribute('data-kind')==='x' ? it.x : it.ig;
+      var kind = b.getAttribute('data-kind'); var text = kind==='x' ? it.x : kind==='alt' ? it.alt : it.ig;
       var done=function(){ b.textContent='Copied'; b.setAttribute('data-done','1'); toast.classList.add('on'); clearTimeout(tt); tt=setTimeout(function(){toast.classList.remove('on'); b.textContent='Copy'; b.removeAttribute('data-done');},1400); };
       var fallback=function(){ var ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy');}catch(e){} document.body.removeChild(ta); };
       if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, function(){ fallback(); done(); }); } else { fallback(); done(); }
