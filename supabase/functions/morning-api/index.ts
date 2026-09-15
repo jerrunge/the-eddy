@@ -26,9 +26,10 @@
 //            lists in undated.parents. Undated children now count under their box.
 //   Doubles  a project move may name the desk item it repeats (project_moves.desk_item_id, migration
 //            actions_only_01). While the move is open the move is the card and the desk item lists in
-//            held.items (reason twin) when dated. Done or undo on the move closes or reopens the desk
-//            item too; a Done on the desk item never closes the move. Until the column exists the old
-//            select runs and links_ready is false.
+//            held.items (reason twin) when dated. Done on the move closes the desk item too, and undo or
+//            reopen of that Done reopens it; an undo of Tomorrow or Skip never touches the desk item, and
+//            a Done on the desk item never closes the move. Until the column exists the old select runs
+//            and links_ready is false.
 // Nothing vanishes: whatever stops being a card is listed in held or undated, counted on its door
 // (door.held, door.undated) and in counts.held, and stays in 29:11 Work.
 //
@@ -44,7 +45,8 @@
 //            lrow:    { id, key, title, url, due, priority, state, reason: goal|parked|parent|undated_urgent|undated, open_children }
 //            door:    { ..., today, later, behind, undated, held }; counts: { sitting, open, later, behind, undated, held }
 //   tap      { card_id, action, post_id?, post_ids?, url?, value?, choice?, text?, source? } -> { ok, card }
-//            on a move with a desk twin: -> { ok, card, twin_card, touched, twin_skipped? } (Done or undo also closes or reopens the twin)
+//            on a move with a desk twin: -> { ok, card, twin_card, touched, twin_skipped? } (Done also closes the twin; undo or reopen of a
+//            done move reopens it; twin_skipped: open children | already done | already open, and nothing is written to the desk item)
 //            card ids: content:<id> routine:<id> ruling:<id> item:<id> move:<id> linear:<id> med:<timing> calendar:<id>
 //            actions: posted sent done hold skip ruled undo reopen (done on a med card takes post_id = the medication)
 //   text     { card_id, post_id? }              -> { ok, copy:[...] }   copy for a card the composition left thin
@@ -1029,16 +1031,21 @@ Deno.serve(async (req: Request) => {
         else return j({ error: "unknown action for move" }, headers, 400);
         const u = await sb.from("project_moves").update(patch).eq("id", mid).select("*").single();
         if (u.error) return j({ error: u.error.message }, headers, 500);
-        // one job, one card (RULINGS 2026-09-14): Done closes the desk item this move repeats; undo or reopen reopens
-        // it, even one he closed himself in Work (reopening is the visible direction). Hold and skip move only the
-        // move. A twin with open children is left alone: its steps close it. Before actions_only_01 the row carries
-        // no desk_item_id and nothing cascades.
+        // one job, one card (RULINGS 2026-09-14): Done closes the desk item this move repeats. Undo or reopen
+        // takes back a Done and nothing else: it reopens the desk item only when the move was done before this
+        // tap (read above, before the update), even one he closed himself in Work, since reopening is the visible
+        // direction. An Undo after Tomorrow or Skip moves only the move and never touches the desk item. A Done
+        // leaves a desk item he already closed as it is (his done_at stays), and an undo leaves an open one as it
+        // is. Hold and skip move only the move. A twin with open children is left alone: its steps close it.
+        // Before actions_only_01 the row carries no desk_item_id and nothing cascades.
         const twinId: string | null = m.desk_item_id || null;
+        const wasDone = m.status === "done";
         let twin: any = twinId ? (await sb.from("desk_items").select("*").eq("id", twinId).maybeSingle()).data : null;
         let twinCard: any = null; let twinSkipped: string | null = null;
-        if (twin && ["done", "undo", "reopen"].includes(action)) {
-          const kids = (await sb.from("desk_items").select("id").eq("parent_item_id", twin.id).eq("done", false)).data ?? [];
-          if (kids.length) twinSkipped = "open children";
+        if (twin && (action === "done" || ((action === "undo" || action === "reopen") && wasDone))) {
+          const closing = action === "done";
+          if (!!twin.done === closing) twinSkipped = closing ? "already done" : "already open";
+          else if (((await sb.from("desk_items").select("id").eq("parent_item_id", twin.id).eq("done", false)).data ?? []).length) twinSkipped = "open children";
           else {
             const tp = action === "done" ? { done: true, done_at: now, updated_at: now } : { done: false, done_at: null, updated_at: now };
             const tu = await sb.from("desk_items").update(tp).eq("id", twin.id).select("*").single();

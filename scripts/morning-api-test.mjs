@@ -327,6 +327,49 @@ for (const action of ["undo", "reopen"]) {
   const { db } = await tap({ card_id: "move:" + FAB, action: "undo" }, (t) => { t.project_moves[0].status = "done"; t.desk_items.find((x) => x.id === TWIN).done = true; return t; });
   eq("C2 undo reopens a desk item closed in Work", deskWrites(db).map((w) => w.payload.done), [false]);
 }
+// undo and reopen take back a Done and nothing else: after Tomorrow or Skip the move was never done, so the Undo
+// moves only the move, even when he had closed the desk item himself in Work
+const CLOSED_AT = "2026-09-13T20:00:00Z";
+const closedInWork = (t) => { const x = t.desk_items.find((i) => i.id === TWIN); x.done = true; x.done_at = CLOSED_AT; return t; };
+for (const [was, action] of [["hold", "undo"], ["hold", "reopen"], ["skip", "undo"]]) {
+  const { r, db, tables } = await tap({ card_id: "move:" + FAB, action }, (t) => { t.project_moves[0].target_ymd = "2026-09-15"; return closedInWork(t); });
+  eq(`C2 ${was} then ${action} on a linked move: no desk_items row written`, [r.status, deskWrites(db).length, r.json.twin_card, r.json.twin_skipped ?? null, r.json.touched], [200, 0, null, null, ["move:" + FAB]]);
+  eq(`C2 ${was} then ${action}: the move reopens on today`, moveWrites(db).map((w) => [w.payload.status, w.payload.target_ymd]), [["open", D]]);
+  eq(`C2 ${was} then ${action}: the desk item he closed stays closed with his done_at`, (({ done, done_at }) => ({ done, done_at }))(tables.desk_items.find((x) => x.id === TWIN)), { done: true, done_at: CLOSED_AT });
+  eq(`C2 ${was} then ${action}: the card's twin says closed`, r.json.card.twin, { item_id: TWIN, text: "Set up the staging area", open: false });
+}
+{
+  const { r, db } = await tap({ card_id: "move:" + FAB, action: "undo" }, (t) => { t.project_moves[0].target_ymd = "2026-09-15"; return t; });
+  eq("C2 hold then undo with the desk item open: no desk_items row written", [r.status, deskWrites(db).length, r.json.twin_card, r.json.touched], [200, 0, null, ["move:" + FAB]]);
+}
+{
+  // Done on a move whose desk item he already closed: nothing written to the desk item, his done_at stays
+  const { r, db, tables } = await tap({ card_id: "move:" + FAB, action: "done" }, closedInWork);
+  eq("C2 Done on a twin already closed: no desk_items row written", [r.status, deskWrites(db).length, r.json.twin_card, r.json.twin_skipped, r.json.touched], [200, 0, null, "already done", ["move:" + FAB]]);
+  eq("C2 Done on a twin already closed: the move is done", [moveWrites(db).map((w) => w.payload.status), r.json.card.status], [["done"], "done"]);
+  eq("C2 Done on a twin already closed: done_at unchanged", tables.desk_items.find((x) => x.id === TWIN).done_at, CLOSED_AT);
+}
+{
+  // undo of a Done whose desk item is already open (he reopened it in Work): nothing written to the desk item
+  const { r, db } = await tap({ card_id: "move:" + FAB, action: "undo" }, (t) => { t.project_moves[0].status = "done"; return t; });
+  eq("C2 undo of a Done with the twin already open: no desk_items row written", [r.status, deskWrites(db).length, r.json.twin_card, r.json.twin_skipped, moveWrites(db).map((w) => w.payload.status)], [200, 0, null, "already open", ["open"]]);
+}
+{
+  // the whole round on one store: Done closes both, Undo reopens both, then Tomorrow and Undo leave the desk item alone
+  const { handler } = await fresh();
+  const tables = tablesFor();
+  const db = mockDb(tables); globalThis.__sb = db; linearCalls = [];
+  const twinRow = () => (({ done, done_at }) => ({ done, done_at }))(tables.desk_items.find((x) => x.id === TWIN));
+  const a = await call(handler, { op: "tap", card_id: "move:" + FAB, action: "done" });
+  eq("C2 round: Done closes both", [a.status, tables.project_moves[0].status, twinRow().done, a.json.touched], [200, "done", true, ["move:" + FAB, "item:" + TWIN]]);
+  const b = await call(handler, { op: "tap", card_id: "move:" + FAB, action: "undo" });
+  eq("C2 round: Undo of that Done reopens both", [b.status, tables.project_moves[0].status, twinRow(), b.json.touched], [200, "open", { done: false, done_at: null }, ["move:" + FAB, "item:" + TWIN]]);
+  tables.desk_items.find((x) => x.id === TWIN).done = true; tables.desk_items.find((x) => x.id === TWIN).done_at = CLOSED_AT;
+  const n = deskWrites(db).length;
+  const c = await call(handler, { op: "tap", card_id: "move:" + FAB, action: "hold" });
+  const u = await call(handler, { op: "tap", card_id: "move:" + FAB, action: "undo" });
+  eq("C2 round: he closes the desk item in Work, then Tomorrow and Undo on the move write no desk_items row", [c.status, u.status, deskWrites(db).length - n, twinRow(), tables.project_moves[0].status], [200, 200, 0, { done: true, done_at: CLOSED_AT }, "open"]);
+}
 for (const action of ["hold", "skip"]) {
   const { r, db } = await tap({ card_id: "move:" + FAB, action });
   eq(`C2 ${action}: no cascade`, [r.status, deskWrites(db).length, r.json.twin_card, r.json.touched], [200, 0, null, ["move:" + FAB]]);
