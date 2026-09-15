@@ -1,4 +1,4 @@
-// morning-api v11: THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
+// morning-api v12: THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
 // shows what he is supposed to do just today, and no two tabs disagreeing). One composition
 // of the day for every surface: the Chart House's Morning room, the 29:11 face on the phone,
 // the iPad, the Mac, the Watch, the menu bar, Siri. Every renderer reads this; every tap
@@ -15,14 +15,36 @@
 // composer writes `undated` counts (in all, per door, per box) so a door can say
 // "34 items with no day". Floors, not ceilings: no caps, no hidden rows.
 //
+// Actions only (RULINGS 2026-09-14, "what may reach the Morning", "goals in Linear", "a job written
+// twice"): a card is one step with a date he can do in one sitting. Priority never places a card.
+//   Linear   an assigned open issue (Duplicate is out of every count) is a card only when it carries no
+//            Goal or Parked label, has no open sub-issues, and has a due date. Otherwise it is listed:
+//            undated in undated.linear_list (undated.linear_urgent for Urgent with no day), dated in
+//            held.linear. A sub-issue's why is its parent's title.
+//   Desk     an item with open child items never renders; its children place by their own days with
+//            the parent's text as the why. Dated, it lists in held.items (reason parent); every parent
+//            lists in undated.parents. Undated children now count under their box.
+//   Doubles  a project move may name the desk item it repeats (project_moves.desk_item_id, migration
+//            actions_only_01). While the move is open the move is the card and the desk item lists in
+//            held.items (reason twin) when dated. Done or undo on the move closes or reopens the desk
+//            item too; a Done on the desk item never closes the move. Until the column exists the old
+//            select runs and links_ready is false.
+// Nothing vanishes: whatever stops being a card is listed in held or undated, counted on its door
+// (door.held, door.undated) and in counts.held, and stays in 29:11 Work.
+//
 // Door: the same device token as the Harbor, the hub, and the face (SHA-256 against the accepted
 // hashes; MORNING_TOKEN_HASHES in the env overrides the face's list), or the service role key as a
 // bearer for the Chart House's own Pages function. No anon path.
 //
 // Ops (POST, json):
-//   morning  { date?, now_min? }                -> { date, now, now_min, clock, next_rule, next_id, sitting:[card], later:[day], behind:[group], undated, doors:[door], week:[day], counts, served_at }
+//   morning  { date?, now_min? }                -> { date, now, now_min, clock, next_rule, place_rule, next_id, sitting:[card], later:[day], behind:[group], undated, held, doors:[door], week:[day], counts, links_ready, served_at }
 //            now_min (0 to 1439) is a test clock, honored only for the service role; a device token's is ignored.
+//            undated: { total, items, moves, linear, content, doors, boxes, linear_urgent:[lrow], linear_list:[lrow], parents:[{id, title, box, door, due, open_children, undated_children}] }
+//            held:    { total, doors, items:[{id, card_id, title, box, door, due, reason: parent|twin, open_children, move_id, move_day}], linear:[lrow] }
+//            lrow:    { id, key, title, url, due, priority, state, reason: goal|parked|parent|undated_urgent|undated, open_children }
+//            door:    { ..., today, later, behind, undated, held }; counts: { sitting, open, later, behind, undated, held }
 //   tap      { card_id, action, post_id?, post_ids?, url?, value?, choice?, text?, source? } -> { ok, card }
+//            on a move with a desk twin: -> { ok, card, twin_card, touched, twin_skipped? } (Done or undo also closes or reopens the twin)
 //            card ids: content:<id> routine:<id> ruling:<id> item:<id> move:<id> linear:<id> med:<timing> calendar:<id>
 //            actions: posted sent done hold skip ruled undo reopen (done on a med card takes post_id = the medication)
 //   text     { card_id, post_id? }              -> { ok, copy:[...] }   copy for a card the composition left thin
@@ -36,6 +58,7 @@
 //           taps:[{action, label, post_id?}], status, posts:[{id, platform, status, url}] (content; the meds
 //           of a window on a meds card), options:[{key,label}] (ruling), links:[{label, href}], day,
 //           overdue_since?, campaign? (content), box? (work), project? (move), anchor? cadence? rungs? (routine),
+//           parent? (work {id, title}, linear {id, key, title}; null when none), twin? (move {item_id, text, open}; null when unlinked),
 //           due_min, until_min }
 //
 // The next card, by the clock (RULINGS 2026-09-14, "the next thing on every screen"): walk the sitting in
@@ -404,44 +427,90 @@ function checklistCard(t: any, comp: any, today: string): Card {
     first_motion: t.first_physical_motion || null, source_path: t.source_path || null, day: today,
   };
 }
-function itemCard(it: any, box: any, today: string): Card {
+// A desk item as a card. A child item carries its (nearest, open) parent's text as its why, plus the days
+// past when it is overdue (RULINGS 2026-09-14: goals and projects reach the day only through their steps).
+function itemCard(it: any, box: any, today: string, parent?: any): Card {
   const day = it.due;
   const links: any[] = [];
   const url = String(it.detail || "").match(/https?:\/\/\S+/);
   if (url) links.push({ label: "Open", href: url[0] });
   if (it.linear_ref && /^https?:/.test(it.linear_ref)) links.push({ label: "In Linear", href: it.linear_ref });
+  const why = parent
+    ? [parent.text, day && day < today ? ago(day, today) : null].filter(Boolean).join(" · ")
+    : it.detail && !url ? it.detail : (day && day < today ? ago(day, today) + " · " + (box?.title || "") : (box?.title || null));
   return {
     id: "item:" + it.id, source: "work", time: WORK_TIME, block: "Wake", due_min: null, until_min: null, door: doorOfBox(box?.title || ""),
-    what: it.text, why: it.detail && !url ? it.detail : (day && day < today ? ago(day, today) + " · " + (box?.title || "") : (box?.title || null)),
+    what: it.text, why: why || null,
     copy: [], photo: null, kit: null,
     taps: [{ action: "done", label: "Done" }, { action: "hold", label: "Tomorrow" }, { action: "hold", label: "Next week", value: "7" }],
     links, status: it.done ? "done" : "open", box: box?.title || null, box_id: it.box_id, kind: it.kind || "task",
     options: it.kind === "decision" && Array.isArray(it.options) ? it.options.map((o: any) => (typeof o === "string" ? { key: o, label: o } : { key: o.key || o.id || o.label, label: o.label || o.text || String(o.key || "") })) : [],
+    parent: parent ? { id: parent.id, title: parent.text } : null,
     day, overdue_since: day && day < today ? day : null,
   };
 }
-function moveCard(m: any, project: any, today: string): Card {
+// A project move as a card. twin: the desk item this move repeats (project_moves.desk_item_id), null when unlinked;
+// text and open come from the open desk items the composer holds (null text and open false when that item is closed).
+function moveCard(m: any, project: any, today: string, itemById?: Map<string, any>): Card {
   const day = m.target_ymd;
+  const twinItem = m.desk_item_id ? itemById?.get(m.desk_item_id) : null;
   return {
     id: "move:" + m.id, source: "move", time: WORK_TIME, block: "Wake", due_min: null, until_min: null, door: "house",
     what: m.title, why: m.why || (project ? "Step " + (m.stage ?? "") + " of " + project.title : null),
     copy: [], photo: null, kit: null,
     taps: [{ action: "done", label: "Done" }, { action: "hold", label: "Tomorrow" }],
     links: [], status: m.status === "done" ? "done" : "open", project: project?.title || null, project_id: m.project_id, stage: m.stage ?? null,
+    twin: m.desk_item_id ? { item_id: m.desk_item_id, text: twinItem ? twinItem.text : null, open: !!twinItem && !twinItem.done } : null,
     day, overdue_since: day && day < today ? day : null,
   };
 }
+// A Linear issue as a card. A sub-issue (open parent) carries the parent's title as its why.
 function linearCard(i: any, today: string): Card {
   const day = i.due || null;
   const p = i.priority;
-  const why = [i.project ? String(i.project).replace(/^[^\w]+/, "").trim() : null, i.state || null, p === 1 ? "urgent" : p === 2 ? "high" : null, day && day < today ? ago(day, today) : null].filter(Boolean).join(" · ");
+  const overdue = day && day < today ? ago(day, today) : null;
+  const why = i.parent
+    ? [i.parent.title, overdue].filter(Boolean).join(" · ")
+    : [i.project ? String(i.project).replace(/^[^\w]+/, "").trim() : null, i.state || null, p === 1 ? "urgent" : p === 2 ? "high" : null, overdue].filter(Boolean).join(" · ");
   return {
     id: "linear:" + i.id, source: "linear", time: WORK_TIME, block: "Wake", due_min: null, until_min: null, door: "house",
     what: (i.key ? i.key + " " : "") + i.title, why: why || null, copy: [], photo: null, kit: null,
     taps: [{ action: "done", label: "Done in Linear" }, { action: "hold", label: "Tomorrow" }],
     links: i.url ? [{ label: "Open in Linear", href: i.url }] : [], status: "open", priority: p ?? null, linear_key: i.key || null, team_id: i.team_id || null,
+    parent: i.parent ? { id: i.parent.id, key: i.parent.key || null, title: i.parent.title } : null,
     day, overdue_since: day && day < today ? day : null,
   };
+}
+// ----- actions only (RULINGS 2026-09-14) -----
+// Linear state types that are closed: out of every card, count and list.
+const LINEAR_CLOSED = ["completed", "canceled", "duplicate"];
+// project_moves as the Morning reads them; desk_item_id arrives with migration actions_only_01
+const MOVE_COLS = "id, project_id, title, why, stage, target_ymd, status";
+// Why a Linear row is not a card, checked in order; null means it is a card. "skip" is out of every count and list.
+function linearReason(i: any): "skip" | "goal" | "parked" | "parent" | "undated_urgent" | "undated" | null {
+  if (LINEAR_CLOSED.includes(String(i.state_type || "")) || String(i.state || "").toLowerCase() === "duplicate") return "skip";
+  const labels = (i.labels || []).map((l: any) => String(typeof l === "string" ? l : l?.name || "").toLowerCase());
+  if (labels.includes("goal")) return "goal";
+  if (labels.includes("parked")) return "parked";
+  if ((i.open_children || []).length > 0) return "parent";   // any assignee: a child someone else holds keeps the parent off the day
+  if (!i.due) return i.priority === 1 ? "undated_urgent" : "undated";
+  return null;
+}
+// The desk's holds. itemById: the open items the composer reads (not notes, box not archived). openKids: a parent's
+// open child items, only where the parent is itself open. twinOf: a desk item's linking open move, the first in
+// the given (stage) order.
+function deskHolds(items: any[], moves: any[]) {
+  const itemById = new Map<string, any>();
+  for (const it of items) itemById.set(it.id, it);
+  const openKids = new Map<string, any[]>();
+  for (const it of items) {
+    if (!it.parent_item_id || !itemById.has(it.parent_item_id)) continue;
+    if (!openKids.has(it.parent_item_id)) openKids.set(it.parent_item_id, []);
+    openKids.get(it.parent_item_id)!.push(it);
+  }
+  const twinOf = new Map<string, any>();
+  for (const m of moves) if (m.status !== "done" && m.desk_item_id && itemById.has(m.desk_item_id) && !twinOf.has(m.desk_item_id)) twinOf.set(m.desk_item_id, m);
+  return { itemById, openKids, twinOf };
 }
 // One card per meds window: every med of the window as a "post" (taken or due), one tap per med and one for all.
 function medsCard(timing: string, meds: any[], log: any[], today: string): Card {
@@ -489,10 +558,34 @@ async function linearQuery(key: string, query: string, variables: Record<string,
 async function linearKey(sb: any): Promise<string> {
   try { const r = await sb.from("eddy_config").select("value").eq("key", "linear_api_key").maybeSingle(); return String(r.data?.value || ""); } catch { return ""; }
 }
+// Every open issue assigned to him (Duplicate is closed too), every page: nothing past page 1 may vanish.
+const LINEAR_OPEN_QUERY = `query($after: String) { viewer { assignedIssues(first: 100, after: $after, filter: { state: { type: { nin: ["completed", "canceled", "duplicate"] } } }, orderBy: updatedAt) {
+  pageInfo { hasNextPage endCursor }
+  nodes { id identifier title priority dueDate url updatedAt state { name type } project { name } team { id } labels { nodes { name } }
+    parent { id identifier title state { type } }
+    children(first: 50) { nodes { id identifier title dueDate state { type } assignee { isMe } } } } } } }`;
+// A Linear node as the engine's row. parent: only an open parent. open_children: the children not closed, any assignee.
+function linearRow(i: any) {
+  const closed = (s: any) => LINEAR_CLOSED.includes(String(s?.type || ""));
+  return {
+    id: i.id, key: i.identifier, title: i.title, priority: i.priority, due: i.dueDate, url: i.url, updated: i.updatedAt, state: i.state?.name, state_type: i.state?.type, project: i.project?.name, labels: (i.labels?.nodes ?? []).map((l: any) => l.name), team_id: i.team?.id,
+    parent: i.parent && !closed(i.parent.state) ? { id: i.parent.id, key: i.parent.identifier, title: i.parent.title } : null,
+    open_children: (i.children?.nodes ?? []).filter((c: any) => !closed(c.state)).map((c: any) => ({ id: c.id, key: c.identifier, title: c.title, due: c.dueDate || null, mine: !!c.assignee?.isMe })),
+  };
+}
 async function linearOpen(key: string): Promise<any[]> {
   if (linearCache && Date.now() - linearCache.at < 5 * 60000) return linearCache.rows;
-  const d = await linearQuery(key, `query { viewer { assignedIssues(first: 100, filter: { state: { type: { nin: ["completed", "canceled"] } } }, orderBy: updatedAt) { nodes { id identifier title priority dueDate url updatedAt state { name type } project { name } labels { nodes { name } } team { id } } } } }`);
-  const rows = (d.viewer?.assignedIssues?.nodes ?? []).map((i: any) => ({ id: i.id, key: i.identifier, title: i.title, priority: i.priority, due: i.dueDate, url: i.url, updated: i.updatedAt, state: i.state?.name, state_type: i.state?.type, project: i.project?.name, labels: (i.labels?.nodes ?? []).map((l: any) => l.name), team_id: i.team?.id }));
+  const nodes: any[] = [];
+  let after: string | null = null;
+  for (;;) {
+    const d = await linearQuery(key, LINEAR_OPEN_QUERY, { after });
+    const conn = d.viewer?.assignedIssues;
+    nodes.push(...(conn?.nodes ?? []));
+    const cursor = conn?.pageInfo?.endCursor || null;
+    if (!conn?.pageInfo?.hasNextPage || !cursor || cursor === after) break;
+    after = cursor;
+  }
+  const rows = nodes.map(linearRow);
   linearCache = { at: Date.now(), rows };
   return rows;
 }
@@ -595,7 +688,7 @@ Deno.serve(async (req: Request) => {
         sb.from("desk_boxes").select("id, title, why, deadline, position").eq("archived", false).order("position"),
         sb.from("desk_items").select("id, box_id, text, detail, done, due, kind, options, choice, linear_ref, parent_item_id, position").eq("done", false).order("position"),
         sb.from("projects").select("id, title, due_ymd, status"),
-        sb.from("project_moves").select("id, project_id, title, why, stage, target_ymd, status").neq("status", "done").order("stage"),
+        sb.from("project_moves").select(MOVE_COLS + ", desk_item_id").neq("status", "done").order("stage"),
         sb.from("medications").select("id, name, dose, timing, active").eq("active", true).order("name"),
         sb.from("med_log").select("medication_id, med_name, taken_at").eq("date", today),
         sb.from("calendar_today_cache").select("id, event_id, summary, start_at, end_at, all_day, location, html_link").eq("event_date", today).order("start_at"),
@@ -609,7 +702,11 @@ Deno.serve(async (req: Request) => {
       const boxes = boxesQ.data ?? []; const boxById = new Map<string, any>(); for (const b of boxes) boxById.set(b.id, b);
       const projects = projectsQ.data ?? []; const projById = new Map<string, any>(); for (const p of projects) projById.set(p.id, p);
       const items = (itemsQ.data ?? []).filter((it: any) => it.kind !== "note" && boxById.has(it.box_id));
-      const moves = movesQ.data ?? [];
+      // the links (project_moves.desk_item_id, migration actions_only_01): until the column exists the old select
+      // runs, so no move is lost to a missing column and no move has a twin
+      const linksReady = !movesQ.error;
+      let moves: any[] = movesQ.data ?? [];
+      if (movesQ.error) moves = (await sb.from("project_moves").select(MOVE_COLS).neq("status", "done").order("stage")).data ?? [];
       const meds = medsQ.data ?? [];
       const medLog = medLogQ.data ?? [];
       const linear: any[] = lkey.rows; const linearError: string | null = lkey.error;
@@ -648,22 +745,38 @@ Deno.serve(async (req: Request) => {
       for (const t of todaysTemplates) sitting.push(checklistCard(t, comps.get(t.id), today));
       for (const r of legacyToday) sitting.push(routineCard(r, legacyMarks.get(r.id), today));
       for (const r of (rulingsQ.data ?? [])) sitting.push(rulingCard(r));
+      // actions only (RULINGS 2026-09-14). A desk item with open children never renders: its children place by
+      // their own days, each carrying the parent's text. A desk item an open move repeats never renders: the move
+      // is the card. Both stay in Work and in the counts; dated, they list in held.items.
+      const { itemById, openKids, twinOf } = deskHolds(items, moves);
+      const heldItems: any[] = [];
       for (const it of items) {
+        const kids = openKids.get(it.id) || [];
+        const twin = twinOf.get(it.id) || null;
+        if (kids.length || twin) {
+          if (it.due) { const box = boxById.get(it.box_id); heldItems.push({ id: it.id, card_id: "item:" + it.id, title: it.text, box: box?.title || null, door: doorOfBox(box?.title || ""), due: it.due, reason: kids.length ? "parent" : "twin", open_children: kids.length, move_id: twin ? twin.id : null, move_day: twin ? twin.target_ymd || null : null }); }
+          continue;
+        }
         if (!it.due) continue;
-        const c = itemCard(it, boxById.get(it.box_id), today);
+        const c = itemCard(it, boxById.get(it.box_id), today, it.parent_item_id ? itemById.get(it.parent_item_id) : undefined);
         if (it.due === today) sitting.push(c); else if (it.due < today) behindPut("box:" + it.box_id, "box", boxById.get(it.box_id)?.title || "a box", c.door, c); else if (it.due <= later_to) laterPut(c);
       }
       for (const m of moves) {
         if (!m.target_ymd) continue;
-        const c = moveCard(m, projById.get(m.project_id), today);
+        const c = moveCard(m, projById.get(m.project_id), today, itemById);
         if (m.target_ymd === today) sitting.push(c); else if (m.target_ymd < today) behindPut("project:" + m.project_id, "project", projById.get(m.project_id)?.title || "a project", "house", c); else if (m.target_ymd <= later_to) laterPut(c);
       }
+      // A Linear issue is a card only when linearReason is null; priority never places a card. The rest list in
+      // undated (no due date) or held (dated), with their reason, and count on the house door.
+      const linearOff: any[] = [];
       for (const i of linear) {
-        if ((i.state || "").toLowerCase() === "duplicate") continue;
+        const reason = linearReason(i);
+        if (reason === "skip") continue;
+        if (reason) { linearOff.push({ i, reason }); continue; }
         const c = linearCard(i, today);
-        if (i.due === today || (!i.due && i.priority === 1)) sitting.push(c);
-        else if (i.due && i.due < today) behindPut("linear", "linear", "Linear", "house", c);
-        else if (i.due && i.due <= later_to) laterPut(c);
+        if (i.due === today) sitting.push(c);
+        else if (i.due < today) behindPut("linear", "linear", "Linear", "house", c);
+        else if (i.due <= later_to) laterPut(c);
       }
       const medsByTiming = new Map<string, any[]>();
       for (const m of meds) { if (m.timing === "weekly" && wd !== 4) continue; const k = m.timing || "on_waking"; if (!medsByTiming.has(k)) medsByTiming.set(k, []); medsByTiming.get(k)!.push(m); }
@@ -689,13 +802,24 @@ Deno.serve(async (req: Request) => {
       }
 
       // ---- what has no day: neither today nor behind; counted so a door can say so
-      const undatedItems = items.filter((it: any) => !it.due && !it.parent_item_id);
+      // every undated desk item counts, children included (they were neither shown nor counted before v12)
+      const undatedItems = items.filter((it: any) => !it.due);
       const undatedByBox = boxes.map((b: any) => ({ id: b.id, title: b.title, door: doorOfBox(b.title), count: undatedItems.filter((it: any) => it.box_id === b.id).length })).filter((b: any) => b.count > 0);
       const undatedMoves = moves.filter((m: any) => !m.target_ymd).length;
-      const undatedLinear = linear.filter((i: any) => !i.due && i.priority !== 1).length;
+      const linearUndated = linearOff.filter((x: any) => !x.i.due);
+      const undatedLinear = linearUndated.length;
       const undatedContent = undatedQ.data ?? [];
-      const undated: any = { total: undatedItems.length + undatedMoves + undatedLinear + undatedContent.length, items: undatedItems.length, moves: undatedMoves, linear: undatedLinear, content: undatedContent.length, doors: {}, boxes: undatedByBox };
+      const lrow = (x: any) => ({ id: x.i.id, key: x.i.key || null, title: x.i.title, url: x.i.url || null, due: x.i.due || null, priority: x.i.priority ?? null, state: x.i.state || null, reason: x.reason, open_children: (x.i.open_children || []).length });
+      const undated: any = { total: undatedItems.length + undatedMoves + undatedLinear + undatedContent.length, items: undatedItems.length, moves: undatedMoves, linear: undatedLinear, content: undatedContent.length, doors: {}, boxes: undatedByBox,
+        linear_urgent: linearUndated.filter((x: any) => x.reason === "undated_urgent").map(lrow),
+        linear_list: linearUndated.map(lrow),
+        parents: items.filter((it: any) => openKids.has(it.id)).map((it: any) => { const box = boxById.get(it.box_id); const kids = openKids.get(it.id)!; return { id: it.id, title: it.text, box: box?.title || null, door: doorOfBox(box?.title || ""), due: it.due || null, open_children: kids.length, undated_children: kids.filter((k: any) => !k.due).length }; }) };
       for (const id of DOOR_ORDER) undated.doors[id] = undatedByBox.filter((b: any) => b.door === id).reduce((n: number, b: any) => n + b.count, 0) + undatedContent.filter((r: any) => doorOf(r) === id).length + (id === "house" ? undatedMoves + undatedLinear : 0);
+      // what is dated but not a card: a desk parent or twin, a dated Goal, Parked or parent issue. Every date counts
+      // (past, today, far ahead), so a count never drops when a card becomes a hold.
+      const held: any = { total: 0, doors: {}, items: heldItems, linear: linearOff.filter((x: any) => x.i.due).map(lrow) };
+      held.total = held.items.length + held.linear.length;
+      for (const id of DOOR_ORDER) held.doors[id] = held.items.filter((x: any) => x.door === id).length + (id === "house" ? held.linear.length : 0);
 
       // the doors
       const ahead = aheadQ.data ?? [];
@@ -707,7 +831,7 @@ Deno.serve(async (req: Request) => {
         const openHere = sitting.filter((c) => c.door === id && c.status === "open").length;
         const laterHere = later.reduce((n, d) => n + d.cards.filter((c: Card) => c.door === id).length, 0);
         const behindHere = behind.filter((g) => g.door === id).reduce((n, g) => n + g.count, 0);
-        const d: any = { id, name: DOORS[id], pill: { state: site && site.ok ? "ok" : "wait", label: site ? (site.ok ? "site live" : "site " + site.status) : "unchecked", url: site?.url || null }, next: null, numbers: [], quiet: null, links: [], today: openHere, later: laterHere, behind: behindHere, undated: undated.doors[id] || 0 };
+        const d: any = { id, name: DOORS[id], pill: { state: site && site.ok ? "ok" : "wait", label: site ? (site.ok ? "site live" : "site " + site.status) : "unchecked", url: site?.url || null }, next: null, numbers: [], quiet: null, links: [], today: openHere, later: laterHere, behind: behindHere, undated: undated.doors[id] || 0, held: held.doors[id] || 0 };
         if (id === "wayofdad") {
           const day0 = hubContent?.day0 || null;
           const dayN = day0 ? Math.round((new Date(today + "T12:00:00Z").getTime() - new Date(day0 + "T12:00:00Z").getTime()) / 86400000) : null;
@@ -750,6 +874,8 @@ Deno.serve(async (req: Request) => {
         if (id === "house") {
           const owed = sitting.filter((c) => c.source === "ruling" && c.status === "open").length;
           d.numbers.push({ label: "rulings owed", value: owed }, { label: "with no day", value: undated.doors.house || 0 });
+          if (undated.linear_urgent.length) d.numbers.push({ label: "Urgent, no day", value: undated.linear_urgent.length });
+          if (held.doors.house) d.numbers.push({ label: "off the day", value: held.doors.house });
           if (!openHere && !nextRow) d.quiet = "Nothing dated for the house today.";
           d.links.push({ label: "RULINGS.md", href: "https://github.com/" + REPO + "/blob/main/RULINGS.md" }, { label: "NOW.md", href: "https://github.com/" + REPO + "/blob/main/NOW.md" });
         }
@@ -772,8 +898,8 @@ Deno.serve(async (req: Request) => {
         week.push({ date: day, dow: DOW[wdi], count: dayCards.length, posts: dayCards.filter((c: Card) => c.source === "content").length, routines: i === 0 ? sitting.filter((c) => c.source === "routine").length : rts, label: label ? label.slice(0, 48) : null });
       }
 
-      const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total };
-      return j({ date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", engine: "one-today v11", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, doors, week, counts, linear_error: linearError, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now }, headers);
+      const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total, held: held.total };
+      return j({ date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v12", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now }, headers);
     }
 
     if (body.op === "text") {
@@ -884,7 +1010,9 @@ Deno.serve(async (req: Request) => {
         else return j({ error: "unknown action for item" }, headers, 400);
         const u = await sb.from("desk_items").update(patch).eq("id", iid).select("*").single();
         if (u.error) return j({ error: u.error.message }, headers, 500);
-        const card = itemCard(u.data, box, today);
+        // a child keeps its open parent's text as its why after a tap; a Done here never closes a move that repeats it
+        const parent = u.data.parent_item_id ? (await sb.from("desk_items").select("id, text, done").eq("id", u.data.parent_item_id).maybeSingle()).data : null;
+        const card = itemCard(u.data, box, today, parent && !parent.done ? parent : undefined);
         if ((action === "hold" || action === "skip") && card.day > today) { card.status = "held"; card.held_until = card.day; }
         return j({ ok: true, card }, headers);
       }
@@ -901,9 +1029,30 @@ Deno.serve(async (req: Request) => {
         else return j({ error: "unknown action for move" }, headers, 400);
         const u = await sb.from("project_moves").update(patch).eq("id", mid).select("*").single();
         if (u.error) return j({ error: u.error.message }, headers, 500);
-        const card = moveCard(u.data, project, today);
+        // one job, one card (RULINGS 2026-09-14): Done closes the desk item this move repeats; undo or reopen reopens
+        // it, even one he closed himself in Work (reopening is the visible direction). Hold and skip move only the
+        // move. A twin with open children is left alone: its steps close it. Before actions_only_01 the row carries
+        // no desk_item_id and nothing cascades.
+        const twinId: string | null = m.desk_item_id || null;
+        let twin: any = twinId ? (await sb.from("desk_items").select("*").eq("id", twinId).maybeSingle()).data : null;
+        let twinCard: any = null; let twinSkipped: string | null = null;
+        if (twin && ["done", "undo", "reopen"].includes(action)) {
+          const kids = (await sb.from("desk_items").select("id").eq("parent_item_id", twin.id).eq("done", false)).data ?? [];
+          if (kids.length) twinSkipped = "open children";
+          else {
+            const tp = action === "done" ? { done: true, done_at: now, updated_at: now } : { done: false, done_at: null, updated_at: now };
+            const tu = await sb.from("desk_items").update(tp).eq("id", twin.id).select("*").single();
+            if (tu.error) return j({ error: "the move is " + (action === "done" ? "done" : "open") + "; its desk twin did not follow: " + tu.error.message, card: moveCard(u.data, project, today, new Map([[twin.id, twin]])) }, headers, 500);
+            twin = tu.data;
+            const tbox = (await sb.from("desk_boxes").select("id, title").eq("id", twin.box_id).maybeSingle()).data;
+            twinCard = itemCard(twin, tbox, today);
+          }
+        }
+        const card = moveCard(u.data, project, today, twin ? new Map([[twin.id, twin]]) : undefined);
         if ((action === "hold" || action === "skip") && card.day > today) { card.status = "held"; card.held_until = card.day; }
-        return j({ ok: true, card }, headers);
+        const out: any = { ok: true, card, twin_card: twinCard, touched: ["move:" + mid].concat(twinCard ? [twinCard.id] : []) };
+        if (twinSkipped) out.twin_skipped = twinSkipped;
+        return j(out, headers);
       }
 
       if (id.startsWith("linear:")) {
