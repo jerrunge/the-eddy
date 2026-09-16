@@ -1,4 +1,80 @@
-// morning-api v12: THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
+// morning-api v13: THE MATRIX ON THE ENGINE (RULINGS 2026-09-16, the estate by tap). Every card the engine
+// serves carries one pillar and one track, and two views regroup the same cards: a day's posting reads as one
+// body of work across the pillars (by_track), and each pillar reads as one body of work across the tracks
+// (by_pillar). A homes table, read by 29:11's map card, says where everything lives. A direct-post door posts a
+// content row on his tap where the platform allows it (Bluesky first). v12 stands whole under it: one
+// composition, three buckets, actions only, the next card by the clock, the same taps.
+//
+// Pillars (RULINGS 09-16, THE PILLARS; plus life for what belongs to no line of business):
+//   maddy | fortify | wayofdad (Walks and Talks inside it) | reckoning | career | door3 | life
+// Tracks (RULINGS 09-16, THE TRACKS):
+//   posting | sends (sends and outreach) | replies (replies and DMs) | building (apps, sites, tools) |
+//   writing (chapters, the operator piece) | rulings (rulings owed) | house (the house and the move) |
+//   health (health and routines) | money (money and legal) | people
+// The rebuild track (Due West, what grounds him) is not a track here; it stays its own view (RULINGS 09-16, THE TWO TRACKS).
+//
+// Where a pillar and a track come from, in order (migration matrix_01):
+//   1. the row's own columns: content_calendar.pillar and .track; checklist_templates.pillar and .track;
+//      rulings_owed.pillar (track is always rulings); desk_boxes.pillar and .track with desk_items.track over it;
+//      projects.pillar and .track with project_moves.track over it. A column set is the truth.
+//   2. the seed rule (docs/reference/estate-sweep-2026-09-16/matrix-mapping.md), which the migration also used to
+//      backfill the columns: content by campaign prefix, then the pillar column, then the title; the track by
+//      platform (social posts, email and other sends); routines by door and title; desk items by box; moves by
+//      project; Linear by its pillar:* and track:* labels, then batch:*; meds are life and health; calendar rows
+//      by a keyword table on the summary (life and people when nothing matches).
+//   3. nothing placed a row: it still carries life and the bucket's default track so no card is ever hidden, and it
+//      is listed in matrix.unplaced with the why, for his word. Nothing here scores him or hides a row.
+// A card says which: placed_by: column | rule | none.
+//
+// Ops (POST, json), the v12 ops unchanged plus:
+//   morning    -> every card in sitting, later[].cards, behind[].cards, held.items and held.linear carries
+//                 pillar, track, placed_by; door stays (walks cards carry door walks and pillar wayofdad).
+//                 Plus matrix: { pillars:[{key, name}], tracks:[{key, name}],
+//                                cells:{ <pillar>: { <track>: { today, later, behind, held } } },
+//                                undated:{ <pillar>: n }, unplaced:[{ card_id, what, pillar, track, why }] }
+//                 and matrix_ready (true once the matrix_01 columns answer; before that every card is placed by rule).
+//   by_pillar  { date?, now_min?, pillar? } -> { date, now, next_id, pillars:[ { key, name, today:[card], later:[day],
+//                 behind:[group], held:{ items, linear }, counts:{ today, open, later, behind, held, undated },
+//                 tracks:[{ key, name, today, later, behind, held }] } ] }
+//                 one pillar as one body of work across the tracks; pillar? narrows to one
+//   by_track   { date?, now_min?, track? } -> { date, now, next_id, tracks:[ { key, name, today:[card], later:[day],
+//                 behind:[group], held:{ items, linear }, counts, pillars:[{ key, name, today, later, behind, held }] } ] }
+//                 one track as one body of work across the pillars (posting is the day's one body of work); track? narrows
+//   homes      { } -> { homes:[{ id, name, what, url, kind, state, group, parent, active, last_touched, pillar, writes, reads, sort }], ready, served_at }
+//                 the map card's read, in the shape the 29:11 map-card lane decodes: id (the key), name, what, url,
+//                 kind: workroom | page | site | record | rebuild | app | tab | room | service | repo | place; state: live | workroom |
+//                 rebuild | tab | legacy | dormant | dead | retired; group (workrooms, his page, the public sites, the record;
+//                 Due West apart); parent (a room's or a tab's home, so it folds as a chip); last_touched (ISO or null, never
+//                 invented: a repo's last commit on main, a file's last commit for RULINGS and NOW, read through the GitHub
+//                 token with a ten-minute cache in hub_content and written back to the row; Webflow, Wix and artifact rows
+//                 stay null); active (true on the twelve he tapped and Due West). Sessions and the dragnet write the table
+//                 (service role); the engine only reads and stamps last_touched.
+//   post       { card_id, post_id?, post_ids?, dry_run? } -> { ok, dry_run, card, results:[{ post_id, platform, account, ok, url, id, error }] }
+//                 THE DIRECT-POST DOOR (RULINGS 09-16, WHERE POSTS ARE FIRED): publishes a content row to its platform with
+//                 the row's copy and its vault photo, on his tap and never otherwise (no cron, no batch; a POST that names a
+//                 card, from a device token or the Chart House's service bearer). The account is the row's own
+//                 (metadata.account) and picks the secret POST_<PLATFORM>_<ACCOUNT>, set by his hand as a Supabase secret,
+//                 never taken in chat. A row already published is refused; dry_run returns what would post and posts
+//                 nothing. On success the row is patched as the Posted tap patches it, plus url and metadata.direct_post;
+//                 on failure nothing on the row changes and the error rides back. Bluesky is built (AT Protocol: an app
+//                 password, up to four images, link facets, 300 graphemes); X, Reddit, Threads, YouTube and Instagram answer
+//                 "no door yet" with what he sets; LinkedIn stays by hand. A photo that lives only in iCloud has no bytes
+//                 here, so that row posts from 29:11's share sheet and the door says so.
+//   A door link that is itself a home (Everything Dad on wayofdad, the Harbor list on walks, RULINGS.md and NOW.md on
+//   house) carries home: <homes id>, so a renderer with the map card up hides it and the link never renders twice on Now.
+//   tap on a routine: Hold means "not today, tomorrow". v13 writes checklist_completions.action (done | skip | hold) with
+//   held_to (tomorrow, or value days), the card reads status held with held_until, and when the routine's ends_on would
+//   end before held_to the row's ends_on moves to held_to (ends_on_was kept on the completion so Undo puts it back).
+//   A routine with no end date needs only the mark; it runs again tomorrow by nature.
+//   tap, text, GET ?op=photo: otherwise unchanged (the same card ids, the same actions; a tap in a pillar view is the same tap).
+//   The three views are the same composition regrouped: the same cards, the same next_id, the same status; by_pillar
+//   and by_track never compose a second next.
+//
+// A card gains: pillar, track, placed_by. Nothing is removed or renamed.
+// A group in behind gains pillar and track only when every card in it agrees (else null): grouping stays by campaign,
+// box, project, Linear as in v12.
+//
+// (v12, standing whole under v13) THE ONE TODAY ENGINE (RULINGS 2026-09-13, "29:11 blasting": one place that
 // shows what he is supposed to do just today, and no two tabs disagreeing). One composition
 // of the day for every surface: the Chart House's Morning room, the 29:11 face on the phone,
 // the iPad, the Mac, the Watch, the menu bar, Siri. Every renderer reads this; every tap
@@ -87,6 +163,213 @@ const SOCIAL = new Set(["x", "bluesky", "instagram", "threads", "linkedin", "you
 const PLATFORM_LABEL: Record<string, string> = { x: "X", bluesky: "Bluesky", instagram: "Instagram", threads: "Threads", linkedin: "LinkedIn", youtube: "YouTube", tiktok: "TikTok", reddit: "Reddit", facebook: "Facebook", substack: "Substack", email: "Email", jeremyrunge_com: "jeremyrunge.com", other: "Note" };
 const BEHIND_DAYS = 7;
 const CACHE_MIN = 10;
+
+// ----- the matrix (RULINGS 2026-09-16): one pillar and one track on every card -----
+const PILLARS: Record<string, string> = { maddy: "Maddy", fortify: "Fortify", wayofdad: "The Way of Dad", reckoning: "Reckoning", career: "Career", door3: "Door 3", life: "Life" };
+const PILLAR_ORDER = ["maddy", "fortify", "wayofdad", "reckoning", "career", "door3", "life"];
+const TRACKS: Record<string, string> = { posting: "Posting", sends: "Sends and outreach", replies: "Replies and DMs", building: "Building", writing: "Writing", rulings: "Rulings owed", house: "The house and the move", health: "Health and routines", money: "Money and legal", people: "People" };
+const TRACK_ORDER = ["posting", "sends", "replies", "building", "writing", "rulings", "house", "health", "money", "people"];
+const LINE = new Set(PILLAR_ORDER);
+const TRACK_SET = new Set(TRACK_ORDER);
+const DOOR_PILLAR: Record<string, string> = { maddy: "maddy", fortify: "fortify", wayofdad: "wayofdad", walks: "wayofdad", house: "life" };
+const SOCIAL_PLATFORMS = new Set([...SOCIAL, "jeremyrunge_com"]);
+let matrixReady: boolean | null = null;   // true once the matrix_01 columns answer a select
+type Place = { pillar: string; track: string; placed_by: "column" | "rule" | "none" };
+// a select that asks for the matrix columns first and falls back to the v12 columns until the migration lands
+async function selectWithFallback(build: (cols: string) => any, full: string, base: string) {
+  let r = await build(full);
+  if (r.error && /column|does not exist|schema cache/i.test(String(r.error.message || ""))) { r = await build(base); r.fell_back = true; if (matrixReady == null) matrixReady = false; }
+  else if (!r.error && matrixReady == null) matrixReady = true;
+  return r;
+}
+function campaignPillar(c: any): string | null {
+  const k = String(c || "");
+  if (/^(wayofdad|walks)/.test(k)) return "wayofdad"; if (/^fortify/.test(k)) return "fortify"; if (/^(maddy|your-people|outreach)/.test(k)) return "maddy";
+  if (/^linkedin-operator/.test(k)) return "career"; if (/^closet-card/.test(k)) return "life"; return null;
+}
+function titlePillar(t: any): string | null { const s = String(t || ""); if (/^Reckoning post/i.test(s)) return "reckoning"; if (/LinkedIn operator/i.test(s)) return "career"; return null; }
+function contentPlace(row: any): Place {
+  const colP = LINE.has(String(row.pillar)) ? String(row.pillar) : null;
+  const colT = TRACK_SET.has(String(row.track)) ? String(row.track) : null;
+  const pillar = colP || campaignPillar(row.campaign) || titlePillar(row.title);
+  const m = row.metadata || {};
+  const social = SOCIAL_PLATFORMS.has(String(row.platform));
+  const ruleTrack = social ? ((/^(essay|long_form)$/.test(String(row.format || "")) && !row.excerpt && !m.vault_path) ? "writing" : "posting") : "sends";
+  return { pillar: pillar || "life", track: colT || ruleTrack, placed_by: !pillar ? "none" : (colP && colT ? "column" : "rule") };
+}
+function routinePlace(t: any): Place {
+  const colP = LINE.has(String(t.pillar)) ? String(t.pillar) : null;
+  const colT = TRACK_SET.has(String(t.track)) ? String(t.track) : null;
+  const title = String(t.title || t.what || "");
+  let rt = "health";   // a routine with no door is the body's day; only a door routine takes a title rule
+  if (t.door === "wayofdad" && /repl|dm/i.test(title)) rt = "replies";
+  else if (t.door && /shoot|post |film|record/i.test(title)) rt = "posting";
+  else if (t.door && /rewrite|script|draft|write/i.test(title)) rt = "writing";
+  else if (t.door && /install|build|proof|deploy/i.test(title)) rt = "building";
+  return { pillar: colP || (t.door ? DOOR_PILLAR[t.door] || "life" : "life"), track: colT || rt, placed_by: colP && colT ? "column" : "rule" };
+}
+function rulingPlace(r: any): Place {
+  const colP = LINE.has(String(r.pillar)) ? String(r.pillar) : null;
+  const byDoor = r.door ? (DOOR_PILLAR[r.door] || (LINE.has(String(r.door)) ? String(r.door) : "life")) : "life";
+  return { pillar: colP || byDoor, track: "rulings", placed_by: colP ? "column" : "rule" };
+}
+const BOX_RULE: Record<string, [string, string]> = { "The House": ["life", "house"], "The Things": ["life", "house"], "The Landing": ["life", "house"], "Cooper": ["life", "house"], "Maddy's Home": ["life", "house"], "The Money": ["life", "money"], "David": ["life", "people"], "The People": ["life", "people"], "The Work": ["career", "sends"], "Walks and Talks: your list": ["wayofdad", "sends"], "Walks and Talks with Dad": ["wayofdad", "replies"], "Door 3": ["door3", "posting"] };
+function itemPlace(it: any, box: any): Place {
+  const title = String(box?.title || "");
+  const colBP = LINE.has(String(box?.pillar)) ? String(box.pillar) : null;
+  const colBT = TRACK_SET.has(String(box?.track)) ? String(box.track) : null;
+  const rule = BOX_RULE[title] || (/^Walks/.test(title) ? ["wayofdad", "sends"] : ["life", "house"]);
+  const colT = TRACK_SET.has(String(it?.track)) ? String(it.track) : null;
+  const what = String(it?.text || "");
+  let rt = colBT || rule[1];
+  if (it?.kind === "decision") rt = "rulings";
+  else if (title === "The Work") { if (/resume|stories|story|draft/i.test(what)) rt = "writing"; else if (/29:11|face|build|install/i.test(what)) rt = "building"; else if (/nudge|text|send|email|reply/i.test(what)) rt = "sends"; }
+  else if (/^Walks/.test(title)) { if (/social|photo|post/i.test(what)) rt = "posting"; else if (/text|consent|drafts/i.test(what)) rt = "sends"; else if (/fi line|knock|safety|form|site/i.test(what)) rt = "building"; else if (/money|record/i.test(what)) rt = "money"; else if (/people|walks:/i.test(what)) rt = "people"; }
+  return { pillar: colBP || rule[0], track: colT || rt, placed_by: colBP && (colT || colBT) ? "column" : "rule" };
+}
+function movePlace(m: any, project: any): Place {
+  const colP = LINE.has(String(project?.pillar)) ? String(project.pillar) : null;
+  const colT = TRACK_SET.has(String(m?.track)) ? String(m.track) : (TRACK_SET.has(String(project?.track)) ? String(project.track) : null);
+  return { pillar: colP || "life", track: colT || "house", placed_by: colP && colT ? "column" : "rule" };
+}
+const LINEAR_PILLAR_LABEL: Record<string, string> = { "pillar:maddy": "maddy", "pillar:fortify": "fortify", "pillar:reckoning": "reckoning", "pillar:career": "career", "pillar:family": "life", "pillar:rebuild": "life", "pillar:fractional": "career", "maddy app": "maddy", "fortify": "fortify", "reckoning": "reckoning", "career": "career", "family": "life", "personal systems": "life" };
+const LINEAR_PROJECT_PILLAR: Record<string, string> = { "maddy's app": "maddy", "reckoning": "reckoning", "career": "career", "personal systems": "life" };
+const LINEAR_BATCH_TRACK: Record<string, string> = { "batch:code": "building", "batch:web": "building", "batch:system": "building", "batch:longform": "writing", "batch:manuscript": "writing", "batch:reading": "writing", "batch:pipeline": "sends", "batch:meetings": "people", "batch:family": "people", "batch:house": "house", "batch:body": "health", "batch:admin": "money" };
+const LINEAR_PROJECT_TRACK: Record<string, string> = { "maddy's app": "building", "reckoning": "writing", "career": "sends", "personal systems": "building" };
+function linearPlace(i: any): Place {
+  const labels = (i?.labels || []).map((l: any) => String(typeof l === "string" ? l : l?.name || "").toLowerCase());
+  const project = String(i?.project || "").replace(/^[^\w]+/, "").trim().toLowerCase();
+  let pillar: string | null = null;
+  for (const l of labels) if (l.startsWith("pillar:") && l !== "pillar:content" && LINEAR_PILLAR_LABEL[l]) { pillar = LINEAR_PILLAR_LABEL[l]; break; }
+  if (!pillar && LINEAR_PROJECT_PILLAR[project]) pillar = LINEAR_PROJECT_PILLAR[project];
+  if (!pillar) for (const l of labels) if (LINEAR_PILLAR_LABEL[l]) { pillar = LINEAR_PILLAR_LABEL[l]; break; }
+  let track: string | null = null; let byLabel = false;
+  for (const l of labels) if (l.startsWith("track:") && TRACK_SET.has(l.slice(6))) { track = l.slice(6); byLabel = true; break; }
+  if (!track) for (const l of labels) if (LINEAR_BATCH_TRACK[l]) { track = LINEAR_BATCH_TRACK[l]; break; }
+  return { pillar: pillar || "life", track: track || LINEAR_PROJECT_TRACK[project] || "building", placed_by: pillar && byLabel ? "column" : (pillar && track ? "rule" : "none") };
+}
+const medsPlace = (): Place => ({ pillar: "life", track: "health", placed_by: "rule" });
+function calendarPlace(ev: any): Place {
+  const t = String(ev?.summary || "").toLowerCase();
+  if (/manuscript|chapter|writing/.test(t)) return { pillar: "reckoning", track: "writing", placed_by: "rule" };
+  if (/wealth|money|attorney|bank|filing|budget/.test(t)) return { pillar: "life", track: "money", placed_by: "rule" };
+  if (/therapy|messaging|call|connect|coffee|lunch|dinner|alan|david|maddy|derek|tina|with /.test(t)) return { pillar: "life", track: "people", placed_by: "rule" };
+  if (/voice|gym|haircut|barber|doctor|dentist|lesson|sleep|stay|camp|trip/.test(t)) return { pillar: "life", track: "health", placed_by: "rule" };
+  if (/donation|donate|showing|storage|pack|move|staged/.test(t)) return { pillar: "life", track: "house", placed_by: "rule" };
+  if (/sunday close|close/.test(t)) return { pillar: "life", track: "health", placed_by: "rule" };
+  return { pillar: "life", track: "people", placed_by: "none" };
+}
+function unplacedWhy(c: any): string {
+  if (c.source === "content") return "no campaign prefix, no line in the pillar column, no title rule";
+  if (c.source === "linear") return "no pillar label, project or team label, or no track label and no batch label";
+  if (c.source === "calendar") return "no keyword on the summary; life and people by default";
+  return "no rule for this source";
+}
+// the same composition, regrouped: one pillar (or one track) as one body of work across the other axis
+function regroup(out: any, by: "pillar" | "track", only?: string) {
+  const keys = by === "pillar" ? PILLAR_ORDER : TRACK_ORDER;
+  const names = by === "pillar" ? PILLARS : TRACKS;
+  const other = by === "pillar" ? "track" : "pillar";
+  const otherKeys = by === "pillar" ? TRACK_ORDER : PILLAR_ORDER;
+  const otherNames = by === "pillar" ? TRACKS : PILLARS;
+  const groups = keys.filter((k) => !only || k === only).map((k) => {
+    const has = (c: any) => c[by] === k;
+    const today = (out.sitting || []).filter(has);
+    const later = (out.later || []).map((d: any) => { const cards = (d.cards || []).filter(has); return Object.assign({}, d, { count: cards.length, label: cards[0] ? String(cards[0].what).slice(0, 48) : null, cards }); });
+    const behind = (out.behind || []).map((g: any) => { const cards = (g.cards || []).filter(has); return cards.length ? Object.assign({}, g, { count: cards.length, cards }) : null; }).filter(Boolean);
+    const held = { items: (out.held?.items || []).filter(has), linear: (out.held?.linear || []).filter(has) };
+    const undated = by === "pillar" ? (out.matrix?.undated?.[k] ?? 0) : null;
+    const counts = { today: today.length, open: today.filter((c: any) => c.status === "open").length, later: later.reduce((n: number, d: any) => n + d.count, 0), behind: behind.reduce((n: number, g: any) => n + g.count, 0), held: held.items.length + held.linear.length, undated };
+    const cross = otherKeys.map((o) => ({ key: o, name: otherNames[o], today: today.filter((c: any) => c[other] === o).length, later: later.reduce((n: number, d: any) => n + d.cards.filter((c: any) => c[other] === o).length, 0), behind: behind.reduce((n: number, g: any) => n + g.cards.filter((c: any) => c[other] === o).length, 0), held: held.items.filter((c: any) => c[other] === o).length + held.linear.filter((c: any) => c[other] === o).length })).filter((x) => x.today || x.later || x.behind || x.held);
+    const g: any = { key: k, name: names[k], today, later, behind, held, counts };
+    g[by === "pillar" ? "tracks" : "pillars"] = cross;
+    return g;
+  });
+  const res: any = { date: out.date, nice_date: out.nice_date, now: out.now, now_min: out.now_min, clock: out.clock, next_id: out.next_id, next_rule: out.next_rule, place_rule: out.place_rule, engine: out.engine, matrix_ready: out.matrix_ready, served_at: out.served_at };
+  res[by === "pillar" ? "pillars" : "tracks"] = groups;
+  return res;
+}
+
+// ----- the homes (the map card's read) -----
+// last_touched is never invented: a repo's last commit on main (a file's last commit when touch_path is set), read from
+// GitHub with the same token as the vault, cached ten minutes in hub_content and written back to the row.
+async function homesTouched(sb: any, rows: any[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const cached = (await sb.from("hub_content").select("content, updated_at").eq("key", "homes-touched").maybeSingle()).data;
+  if (cached && Date.now() - new Date(cached.updated_at).getTime() < CACHE_MIN * 60000) { for (const [k, v] of Object.entries(cached.content?.touched || {})) if (v) out.set(k, String(v)); return out; }
+  const token = await ghToken();
+  if (!token) return out;
+  await Promise.all(rows.filter((h) => h.repo).map(async (h) => {
+    try {
+      const u = `https://api.github.com/repos/jerrunge/${h.repo}/commits?sha=main&per_page=1` + (h.touch_path ? "&path=" + encodeURIComponent(h.touch_path) : "");
+      const r = await fetch(u, { headers: { authorization: "Bearer " + token, "user-agent": "morning-api", accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) return;
+      const d = await r.json();
+      const at = d?.[0]?.commit?.committer?.date || d?.[0]?.commit?.author?.date || null;
+      if (at) out.set(h.id, String(at));
+    } catch { /* unread, never invented */ }
+  }));
+  const touched: Record<string, string> = {}; for (const [k, v] of out) touched[k] = v;
+  const at = new Date().toISOString();
+  await sb.from("hub_content").upsert({ key: "homes-touched", content: { checked_at: at, touched }, updated_at: at }, { onConflict: "key" });
+  for (const h of rows) { const v = out.get(h.id); if (v && v !== h.last_touched) await sb.from("homes").update({ last_touched: v, updated_at: at, updated_by: "morning-api" }).eq("id", h.id); }
+  return out;
+}
+
+// ----- the direct-post door (RULINGS 2026-09-16, WHERE POSTS ARE FIRED): on his tap, never otherwise -----
+const POST_HINT: Record<string, string> = {
+  x: "developer.x.com: an app with read and write on the posting account; the four keys as POST_X_<ACCOUNT>",
+  reddit: "reddit.com/prefs/apps: a script app; POST_REDDIT_<ACCOUNT> as {client_id, client_secret, username, password}",
+  threads: "a Meta app with the Threads API and a long-lived token; POST_THREADS_<ACCOUNT>",
+  youtube: "a Google Cloud OAuth client and a refresh token on the channel; POST_YOUTUBE_<ACCOUNT>",
+  instagram: "only as a creator account, through the same Meta app; POST_INSTAGRAM_<ACCOUNT>",
+  linkedin: "by hand, from the clipboard (RULINGS 09-16)",
+};
+// the row's account reads as he wrote it ("Bluesky @wayofdad.co", "X @wayofdad", "Instagram @way.of.dad"); the secret is named by the
+// handle alone, a domain suffix dropped: POST_BLUESKY_WAYOFDAD, POST_X_WAYOFDAD, POST_INSTAGRAM_WAY_OF_DAD
+function accountKey(account: string) { return String(account || "").trim().replace(/^[A-Za-z. ]+?\s+(?=@)/, "").replace(/^@/, "").replace(/\.(co|com|app|social|bsky\.social)$/i, "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, ""); }
+function secretNameFor(platform: string, account: string) { return "POST_" + String(platform).toUpperCase().replace(/[^A-Z0-9]/g, "_") + "_" + accountKey(account); }
+function graphemes(s: string): number { try { return [...new (Intl as any).Segmenter("en", { granularity: "grapheme" }).segment(s)].length; } catch { return [...s].length; } }
+// link facets: every http(s) URL in the text, by UTF-8 byte offsets, the way the AT Protocol wants them
+function linkFacets(text: string) {
+  const enc = new TextEncoder(); const out: any[] = []; const re = /https?:\/\/[^\s)\]]+/g; let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) { const start = enc.encode(text.slice(0, m.index)).length; const end = start + enc.encode(m[0]).length; out.push({ index: { byteStart: start, byteEnd: end }, features: [{ $type: "app.bsky.richtext.facet#link", uri: m[0] }] }); }
+  return out;
+}
+async function vaultImageBytes(path: string): Promise<{ bytes: Uint8Array; type: string } | null> {
+  if (!isVaultImage(path)) return null;
+  const token = await ghToken(); if (!token) return null;
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, { headers: { authorization: "Bearer " + token, "user-agent": "morning-api", accept: "application/vnd.github.raw+json" } });
+  if (!r.ok) return null;
+  const ext = path.split(".").pop()!.toLowerCase();
+  return { bytes: new Uint8Array(await r.arrayBuffer()), type: IMAGE_TYPE[ext] || "application/octet-stream" };
+}
+async function postBluesky(secret: string, text: string, image: { bytes: Uint8Array; type: string; alt: string | null } | null): Promise<{ url: string; id: string }> {
+  let creds: any; try { creds = JSON.parse(secret); } catch { throw new Error("the Bluesky secret is not JSON {handle, app_password}"); }
+  const handle = String(creds.handle || ""); const pw = String(creds.app_password || "");
+  if (!handle || !pw) throw new Error("the Bluesky secret needs handle and app_password");
+  if (graphemes(text) > 300) throw new Error("Bluesky takes 300 characters; this copy is " + graphemes(text));
+  const pds = "https://bsky.social";
+  const s = await fetch(pds + "/xrpc/com.atproto.server.createSession", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ identifier: handle, password: pw }), signal: AbortSignal.timeout(15000) });
+  if (!s.ok) throw new Error("Bluesky session " + s.status + " " + (await s.text()).slice(0, 120));
+  const sess = await s.json();
+  const auth = { authorization: "Bearer " + sess.accessJwt };
+  const record: any = { $type: "app.bsky.feed.post", text, createdAt: new Date().toISOString() };
+  const facets = linkFacets(text); if (facets.length) record.facets = facets;
+  if (image) {
+    if (image.bytes.byteLength > 1000000) throw new Error("the photo is over Bluesky's 1MB limit (" + Math.round(image.bytes.byteLength / 1024) + "KB); resize it in the vault first");
+    const up = await fetch(pds + "/xrpc/com.atproto.repo.uploadBlob", { method: "POST", headers: Object.assign({ "content-type": image.type }, auth), body: image.bytes, signal: AbortSignal.timeout(30000) });
+    if (!up.ok) throw new Error("Bluesky upload " + up.status + " " + (await up.text()).slice(0, 120));
+    const blob = (await up.json()).blob;
+    record.embed = { $type: "app.bsky.embed.images", images: [{ image: blob, alt: image.alt || "" }] };
+  }
+  const c = await fetch(pds + "/xrpc/com.atproto.repo.createRecord", { method: "POST", headers: Object.assign({ "content-type": "application/json" }, auth), body: JSON.stringify({ repo: sess.did, collection: "app.bsky.feed.post", record }), signal: AbortSignal.timeout(15000) });
+  if (!c.ok) throw new Error("Bluesky post " + c.status + " " + (await c.text()).slice(0, 120));
+  const d = await c.json();
+  const rkey = String(d.uri || "").split("/").pop() || "";
+  return { url: "https://bsky.app/profile/" + handle + "/post/" + rkey, id: String(d.uri || "") };
+}
+const POSTERS: Record<string, (secret: string, text: string, image: any) => Promise<{ url: string; id: string }>> = { bluesky: postBluesky };
 
 const headersFor = (origin: string | null) => ({
   "Access-Control-Allow-Origin": origin || "*",
@@ -245,10 +528,13 @@ function copyPaths(post: any): string[] {
 // ----- composition -----
 type Card = any;
 async function contentCards(sb: any, today: string, hubCards: Map<number, any>, withText: boolean, onlyIds?: string[], ahead?: { from: string; to: string }) {
-  let q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").eq("user_id", USER).not("status", "in", "(published,archived)").not("scheduled_for", "is", null).lte("scheduled_for", today).order("scheduled_for");
-  if (ahead) q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").eq("user_id", USER).not("status", "in", "(published,archived)").gt("scheduled_for", ahead.from).lte("scheduled_for", ahead.to + "T23:59:59").order("scheduled_for");
-  if (onlyIds && onlyIds.length) q = sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at").in("id", onlyIds);
-  const rows = (await q).data ?? [];
+  const CC = "id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at";
+  const build = (cols: string) => {
+    if (onlyIds && onlyIds.length) return sb.from("content_calendar").select(cols).in("id", onlyIds);
+    if (ahead) return sb.from("content_calendar").select(cols).eq("user_id", USER).not("status", "in", "(published,archived)").gt("scheduled_for", ahead.from).lte("scheduled_for", ahead.to + "T23:59:59").order("scheduled_for");
+    return sb.from("content_calendar").select(cols).eq("user_id", USER).not("status", "in", "(published,archived)").not("scheduled_for", "is", null).lte("scheduled_for", today).order("scheduled_for");
+  };
+  const rows = (await selectWithFallback(build, CC + ", track", CC)).data ?? [];
   const groups = new Map<string, any[]>();
   for (const r of rows) { const k = groupKey(r); if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(r); }
   const cards: Card[] = [];
@@ -316,6 +602,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
       overdue_since: day < today ? day : null,
       day,
       stage: m.stage || null,
+      ...contentPlace(lead),
     });
   }
   return cards;
@@ -373,6 +660,7 @@ function rulingCard(r: any): Card {
     answer: r.answer || null,
     answer_text: r.answer_text || null,
     asked_at: r.asked_at,
+    ...rulingPlace(r),
   };
 }
 
@@ -416,7 +704,7 @@ function checklistCard(t: any, comp: any, today: string): Card {
   const time = t.time && t.time !== "later" ? t.time : (clockOf(t.window_start) || ANCHOR_TIME[t.anchor] || "later");
   // the row's own clock: its time, else its window, else its anchor's hour; a routine written "later" has none
   const due = t.time && t.time !== "later" ? minOf(t.time) : t.window_start ? hmsMin(t.window_start) : t.time === "later" ? null : minOf(ANCHOR_TIME[t.anchor]);
-  const status = !comp ? "open" : comp.skipped ? "skipped" : "done";
+  const status = !comp ? "open" : comp.action === "hold" ? "held" : comp.skipped ? "skipped" : "done";
   const copy = Array.isArray(t.copy) ? t.copy : (t.copy ? [t.copy] : []);
   return {
     id: "routine:" + t.id, source: "routine", time, block: blockOf(time, t.anchor), due_min: due, until_min: untilOf(due, t.window_end), door: t.door || null,
@@ -427,6 +715,8 @@ function checklistCard(t: any, comp: any, today: string): Card {
     anchor: t.anchor || null, anchor_name: ANCHOR_NAME[t.anchor] || null, cadence: t.cadence || "daily",
     rungs: (t.rung_full || t.rung_reduced || t.rung_floor) ? { full: t.rung_full || null, reduced: t.rung_reduced || null, floor: t.rung_floor || null } : null,
     first_motion: t.first_physical_motion || null, source_path: t.source_path || null, day: today,
+    held_until: comp && comp.action === "hold" ? comp.held_to || null : null,
+    ...routinePlace(t),
   };
 }
 // A desk item as a card. A child item carries its (nearest, open) parent's text as its why, plus the days
@@ -449,6 +739,7 @@ function itemCard(it: any, box: any, today: string, parent?: any): Card {
     options: it.kind === "decision" && Array.isArray(it.options) ? it.options.map((o: any) => (typeof o === "string" ? { key: o, label: o } : { key: o.key || o.id || o.label, label: o.label || o.text || String(o.key || "") })) : [],
     parent: parent ? { id: parent.id, title: parent.text } : null,
     day, overdue_since: day && day < today ? day : null,
+    ...itemPlace(it, box),
   };
 }
 // A project move as a card. twin: the desk item this move repeats (project_moves.desk_item_id), null when unlinked;
@@ -464,6 +755,7 @@ function moveCard(m: any, project: any, today: string, itemById?: Map<string, an
     links: [], status: m.status === "done" ? "done" : "open", project: project?.title || null, project_id: m.project_id, stage: m.stage ?? null,
     twin: m.desk_item_id ? { item_id: m.desk_item_id, text: twinItem ? twinItem.text : null, open: !!twinItem && !twinItem.done } : null,
     day, overdue_since: day && day < today ? day : null,
+    ...movePlace(m, project),
   };
 }
 // A Linear issue as a card. A sub-issue (open parent) carries the parent's title as its why.
@@ -481,6 +773,7 @@ function linearCard(i: any, today: string): Card {
     links: i.url ? [{ label: "Open in Linear", href: i.url }] : [], status: "open", priority: p ?? null, linear_key: i.key || null, team_id: i.team_id || null,
     parent: i.parent ? { id: i.parent.id, key: i.parent.key || null, title: i.parent.title } : null,
     day, overdue_since: day && day < today ? day : null,
+    ...linearPlace(i),
   };
 }
 // ----- actions only (RULINGS 2026-09-14) -----
@@ -528,6 +821,7 @@ function medsCard(timing: string, meds: any[], log: any[], today: string): Card 
     what: "Meds, " + (MED_LABEL[timing] || timing).toLowerCase() + ": " + meds.map((m) => m.name).join(", "),
     why: left.length === 0 ? "All taken." : left.length === meds.length ? null : left.length + " of " + meds.length + " still due.",
     copy: [], photo: null, kit: null, taps, links: [], status: left.length === 0 ? "done" : "open", posts, timing, day: today,
+    ...medsPlace(),
   };
 }
 // the last day an all-day event covers, when that is after today; end_at is the exclusive date at UTC midnight
@@ -604,11 +898,12 @@ async function linearSetDue(key: string, issueId: string, due: string | null) {
 }
 
 // Every completion of a template on a day is deleted before one is written: one mark per routine per day.
-async function writeCompletion(sb: any, templateId: string, today: string, now: string, skipped: boolean, value: string | null, source: string) {
+async function writeCompletion(sb: any, templateId: string, today: string, now: string, skipped: boolean, value: string | null, source: string, extra: Record<string, unknown> = {}) {
   await sb.from("checklist_completions").delete().eq("template_id", templateId).eq("date", today);
-  const row: any = { template_id: templateId, user_id: USER, date: today, completed_at: now, skipped, value, source };
+  const row: any = Object.assign({ template_id: templateId, user_id: USER, date: today, completed_at: now, skipped, value, source }, extra);
   let u = await sb.from("checklist_completions").insert(row);
-  if (u.error && /column/i.test(u.error.message)) { delete row.value; delete row.source; u = await sb.from("checklist_completions").insert(row); }
+  // before matrix_01 the hold columns are missing: the mark still lands as a skip, and the card reads skipped
+  if (u.error && /column|schema cache/i.test(u.error.message)) { for (const k of ["value", "source", "action", "held_to", "ends_on_was"]) delete row[k]; u = await sb.from("checklist_completions").insert(row); }
   if (u.error) throw new Error(u.error.message);
   return row;
 }
@@ -630,49 +925,8 @@ async function liveChecks(sb: any) {
   return out;
 }
 
-Deno.serve(async (req: Request) => {
-  const headers = headersFor(req.headers.get("origin"));
-  if (req.method === "OPTIONS") return new Response("ok", { headers });
-  if (req.method === "GET") {
-    const u = new URL(req.url);
-    if (u.searchParams.get("op") !== "photo") return j({ error: "POST, or GET ?op=photo" }, headers, 405);
-    // The token travels only in a header, never in the URL: URLs land in logs.
-    const given = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "") || req.headers.get("x-device-token") || "";
-    const hashesG = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
-    const acceptedG = hashesG.length ? hashesG : FACE_HASHES;
-    const serviceG = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const okTok = !!given && (acceptedG.includes(await sha256hex(given)) || (given === serviceG) || (given.length > 20 && await serviceProbe(given)));
-    if (!okTok) return j({ error: "bad token" }, headers, 403);
-    const path = u.searchParams.get("path") || "";
-    if (!isVaultImage(path)) return j({ error: "not a vault image" }, headers, 400);
-    const gh = await ghToken();
-    if (!gh) return j({ error: "MORNING_GH_TOKEN not set" }, headers, 503);
-    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, { headers: { authorization: "Bearer " + gh, "user-agent": "morning-api", accept: "application/vnd.github.raw+json" } });
-    if (!r.ok) return j({ error: "vault " + r.status }, headers, r.status === 404 ? 404 : 502);
-    const ext = path.split(".").pop()!.toLowerCase();
-    return new Response(r.body, { status: 200, headers: { "Access-Control-Allow-Origin": headers["Access-Control-Allow-Origin"], "Content-Type": IMAGE_TYPE[ext] || "application/octet-stream", "Cache-Control": "private, max-age=3600" } });
-  }
-  if (req.method !== "POST") return j({ error: "POST only" }, headers, 405);
-  let body: any;
-  try { body = await req.json(); } catch { return j({ error: "bad json" }, headers, 400); }
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-  const hashes = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
-  const accepted = hashes.length ? hashes : FACE_HASHES;
-  const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  const viaToken = !!body.token && accepted.includes(await sha256hex(String(body.token)));
-  // The Chart House Pages function speaks with the service role as a bearer. The key it holds may
-  // be the legacy JWT or the newer secret; either way, a bearer that can read an RLS-sealed table
-  // through PostgREST is the service role, and nothing else is.
-  let viaService = !!serviceKey && bearer.length > 20 && bearer === serviceKey;
-  if (!viaService && !viaToken && bearer.length > 20) viaService = await serviceProbe(bearer);
-  if (!viaService && !viaToken) return j({ error: "bad token" }, headers, 403);
-  const sb = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
-  const today = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : ptToday();
-  const now = new Date().toISOString();
-  const source = String(body.source || (viaService ? "chart-house" : "face")).slice(0, 40);
-
-  try {
-    if (body.op === "morning") {
+// ----- the one composition (v12), now a function so by_pillar and by_track regroup the same cards -----
+async function compose(sb: any, body: any, viaService: boolean, today: string, now: string) {
       const wd = dow(today);
       const later_to = addDays(today, LATER_DAYS);
       const [hub, tplQ, compQ, legacyRoutinesQ, legacyMarksQ, rulingsQ, live, oppsQ, walksQ, aheadQ, undatedQ, boxesQ, itemsQ, projectsQ, movesQ, medsQ, medLogQ, calQ, lkey] = await Promise.all([
@@ -686,11 +940,11 @@ Deno.serve(async (req: Request) => {
         sb.from("opportunities").select("pillar, stage").is("closed_at", null),
         sb.from("desk_items").select("id, kind, text, source, done, created_at").in("box_id", ["c9ec85f4-c2e2-4294-bfe5-7b500e905eae", "daf7faf0-936f-4e21-aeca-7196b9c31a84"]).eq("done", false),
         sb.from("content_calendar").select("id, title, platform, status, scheduled_for, campaign, pillar, metadata").eq("user_id", USER).neq("status", "archived").gt("scheduled_for", today).lte("scheduled_for", addDays(today, 14)).order("scheduled_for"),
-        sb.from("content_calendar").select("id, campaign, pillar, status, metadata").eq("user_id", USER).eq("status", "draft").is("scheduled_for", null),
-        sb.from("desk_boxes").select("id, title, why, deadline, position").eq("archived", false).order("position"),
-        sb.from("desk_items").select("id, box_id, text, detail, done, due, kind, options, choice, linear_ref, parent_item_id, position").eq("done", false).order("position"),
-        sb.from("projects").select("id, title, due_ymd, status"),
-        sb.from("project_moves").select(MOVE_COLS + ", desk_item_id").neq("status", "done").order("stage"),
+        selectWithFallback((c) => sb.from("content_calendar").select(c).eq("user_id", USER).eq("status", "draft").is("scheduled_for", null), "id, campaign, pillar, status, metadata, title, platform, format, excerpt, track", "id, campaign, pillar, status, metadata, title, platform, format, excerpt"),
+        selectWithFallback((c) => sb.from("desk_boxes").select(c).eq("archived", false).order("position"), "id, title, why, deadline, position, pillar, track", "id, title, why, deadline, position"),
+        selectWithFallback((c) => sb.from("desk_items").select(c).eq("done", false).order("position"), "id, box_id, text, detail, done, due, kind, options, choice, linear_ref, parent_item_id, position, track", "id, box_id, text, detail, done, due, kind, options, choice, linear_ref, parent_item_id, position"),
+        selectWithFallback((c) => sb.from("projects").select(c), "id, title, due_ymd, status, pillar, track", "id, title, due_ymd, status"),
+        selectWithFallback((c) => sb.from("project_moves").select(c).neq("status", "done").order("stage"), MOVE_COLS + ", desk_item_id, track", MOVE_COLS + ", desk_item_id"),
         sb.from("medications").select("id, name, dose, timing, active").eq("active", true).order("name"),
         sb.from("med_log").select("medication_id, med_name, taken_at").eq("date", today),
         sb.from("calendar_today_cache").select("id, event_id, summary, start_at, end_at, all_day, location, html_link").eq("event_date", today).order("start_at"),
@@ -756,7 +1010,7 @@ Deno.serve(async (req: Request) => {
         const kids = openKids.get(it.id) || [];
         const twin = twinOf.get(it.id) || null;
         if (kids.length || twin) {
-          if (it.due) { const box = boxById.get(it.box_id); heldItems.push({ id: it.id, card_id: "item:" + it.id, title: it.text, box: box?.title || null, door: doorOfBox(box?.title || ""), due: it.due, reason: kids.length ? "parent" : "twin", open_children: kids.length, move_id: twin ? twin.id : null, move_day: twin ? twin.target_ymd || null : null }); }
+          if (it.due) { const box = boxById.get(it.box_id); heldItems.push({ id: it.id, card_id: "item:" + it.id, title: it.text, box: box?.title || null, door: doorOfBox(box?.title || ""), due: it.due, reason: kids.length ? "parent" : "twin", open_children: kids.length, move_id: twin ? twin.id : null, move_day: twin ? twin.target_ymd || null : null, ...itemPlace(it, box) }); }
           continue;
         }
         if (!it.due) continue;
@@ -785,7 +1039,7 @@ Deno.serve(async (req: Request) => {
       for (const k of MED_ORDER) if (medsByTiming.has(k)) sitting.push(medsCard(k, medsByTiming.get(k)!, medLog, today));
       // the cache files an all-day event under every Pacific day it covers (event_date is the truth); its start_at is UTC midnight,
       // so reading that in Pacific lands on the evening before and hid every all-day event from today
-      for (const ev of (calQ.data ?? [])) sitting.push(calendarCard(ev, today, now));
+      for (const ev of (calQ.data ?? [])) sitting.push(Object.assign(calendarCard(ev, today, now), calendarPlace(ev)));
 
       // the order of the day: block, then the clock, then the door; the blocks stay whole
       sitting.sort((a, b) => BLOCKS.indexOf(a.block) - BLOCKS.indexOf(b.block) || timeKey(a.time) - timeKey(b.time) || DOOR_ORDER.indexOf(a.door) - DOOR_ORDER.indexOf(b.door));
@@ -811,7 +1065,7 @@ Deno.serve(async (req: Request) => {
       const linearUndated = linearOff.filter((x: any) => !x.i.due);
       const undatedLinear = linearUndated.length;
       const undatedContent = undatedQ.data ?? [];
-      const lrow = (x: any) => ({ id: x.i.id, key: x.i.key || null, title: x.i.title, url: x.i.url || null, due: x.i.due || null, priority: x.i.priority ?? null, state: x.i.state || null, reason: x.reason, open_children: (x.i.open_children || []).length });
+      const lrow = (x: any) => ({ id: x.i.id, key: x.i.key || null, title: x.i.title, url: x.i.url || null, due: x.i.due || null, priority: x.i.priority ?? null, state: x.i.state || null, reason: x.reason, open_children: (x.i.open_children || []).length, ...linearPlace(x.i) });
       const undated: any = { total: undatedItems.length + undatedMoves + undatedLinear + undatedContent.length, items: undatedItems.length, moves: undatedMoves, linear: undatedLinear, content: undatedContent.length, doors: {}, boxes: undatedByBox,
         linear_urgent: linearUndated.filter((x: any) => x.reason === "undated_urgent").map(lrow),
         linear_list: linearUndated.map(lrow),
@@ -822,6 +1076,29 @@ Deno.serve(async (req: Request) => {
       const held: any = { total: 0, doors: {}, items: heldItems, linear: linearOff.filter((x: any) => x.i.due).map(lrow) };
       held.total = held.items.length + held.linear.length;
       for (const id of DOOR_ORDER) held.doors[id] = held.items.filter((x: any) => x.door === id).length + (id === "house" ? held.linear.length : 0);
+
+      // ---- the matrix (RULINGS 2026-09-16): the same cards counted by pillar and track, and the rows no rule placed
+      const cells: any = {};
+      const bump = (c: any, bucket: string) => { const p = c.pillar || "life", t = c.track || "people"; cells[p] = cells[p] || {}; cells[p][t] = cells[p][t] || { today: 0, later: 0, behind: 0, held: 0 }; cells[p][t][bucket]++; };
+      for (const c of sitting) bump(c, "today");
+      for (const d of later) for (const c of d.cards) bump(c, "later");
+      for (const g of behind) for (const c of g.cards) bump(c, "behind");
+      for (const h of held.items) bump(h, "held");
+      for (const h of held.linear) bump(h, "held");
+      for (const g of behind) { const ps = new Set(g.cards.map((c: Card) => c.pillar)), ts = new Set(g.cards.map((c: Card) => c.track)); g.pillar = ps.size === 1 ? [...ps][0] : null; g.track = ts.size === 1 ? [...ts][0] : null; }
+      const undatedByPillar: Record<string, number> = {};
+      for (const b of undatedByBox) { const p = itemPlace({}, boxById.get(b.id)).pillar; undatedByPillar[p] = (undatedByPillar[p] || 0) + b.count; }
+      for (const r of undatedContent) { const p = contentPlace(r).pillar; undatedByPillar[p] = (undatedByPillar[p] || 0) + 1; }
+      if (undatedMoves) undatedByPillar.life = (undatedByPillar.life || 0) + undatedMoves;
+      for (const x of linearUndated) { const p = linearPlace(x.i).pillar; undatedByPillar[p] = (undatedByPillar[p] || 0) + 1; }
+      const unplaced: any[] = [];
+      const listUnplaced = (c: any, bucket: string) => { if (c.placed_by === "none") unplaced.push({ card_id: c.id || c.card_id, bucket, source: c.source || null, what: c.what || c.title, pillar: c.pillar, track: c.track, why: unplacedWhy(c) }); };
+      for (const c of sitting) listUnplaced(c, "today");
+      for (const d of later) for (const c of d.cards) listUnplaced(c, "later");
+      for (const g of behind) for (const c of g.cards) listUnplaced(c, "behind");
+      for (const h of held.items) listUnplaced(Object.assign({ source: "work" }, h), "held");
+      for (const h of held.linear) listUnplaced(Object.assign({ source: "linear", what: h.title }, h), "held");
+      const matrix = { pillars: PILLAR_ORDER.map((k) => ({ key: k, name: PILLARS[k] })), tracks: TRACK_ORDER.map((k) => ({ key: k, name: TRACKS[k] })), cells, undated: undatedByPillar, unplaced };
 
       // the doors
       const ahead = aheadQ.data ?? [];
@@ -848,7 +1125,7 @@ Deno.serve(async (req: Request) => {
           const rpCard = sitting.find((c) => c.source === "routine" && c.door === "wayofdad" && /repl/i.test(c.what));
           d.numbers.push({ label: "DMs today", value: dmCard?.value ?? "not yet" }, { label: "replies today", value: rpCard?.value ?? "not yet" });
           if (nextRow) d.next = "Tomorrow: " + pieceTitle(nextRow).replace(/^Day \d+: /, "") + ".";
-          d.links.push({ label: "Everything Dad", href: "https://jerrunge.github.io/the-eddy/dad-b3ab3e/" }, { label: "Bluesky", href: "https://bsky.app/profile/wayofdad.co" }, { label: "X", href: "https://x.com/wayofdad" }, { label: "Instagram", href: "https://www.instagram.com/way.of.dad/" });
+          d.links.push({ label: "Everything Dad", href: "https://jerrunge.github.io/the-eddy/dad-b3ab3e/", home: "everything-dad" }, { label: "Bluesky", href: "https://bsky.app/profile/wayofdad.co" }, { label: "X", href: "https://x.com/wayofdad" }, { label: "Instagram", href: "https://www.instagram.com/way.of.dad/" });
         }
         if (id === "fortify") {
           const disc = opps.filter((o: any) => o.pillar === "fortify" && /discover/i.test(o.stage || "")).length;
@@ -871,7 +1148,7 @@ Deno.serve(async (req: Request) => {
           const reqs = (walksQ.data ?? []).filter((x: any) => !["homebase", "lane", "face", "chart-house"].includes(String(x.source || "")));
           d.numbers.push({ label: "requests", value: reqs.length });
           if (site?.ok) d.next = "Live. The form knocks your phone.";
-          d.links.push({ label: "walks.jeremyrunge.com", href: "https://walks.jeremyrunge.com/" }, { label: "The Harbor list", href: "https://jeremyrunge.com/h-7q9m2kx4wd" });
+          d.links.push({ label: "walks.jeremyrunge.com", href: "https://walks.jeremyrunge.com/" }, { label: "The Harbor list", href: "https://jeremyrunge.com/h-7q9m2kx4wd", home: "harbor" });
         }
         if (id === "house") {
           const owed = sitting.filter((c) => c.source === "ruling" && c.status === "open").length;
@@ -879,7 +1156,7 @@ Deno.serve(async (req: Request) => {
           if (undated.linear_urgent.length) d.numbers.push({ label: "Urgent, no day", value: undated.linear_urgent.length });
           if (held.doors.house) d.numbers.push({ label: "off the day", value: held.doors.house });
           if (!openHere && !nextRow) d.quiet = "Nothing dated for the house today.";
-          d.links.push({ label: "RULINGS.md", href: "https://github.com/" + REPO + "/blob/main/RULINGS.md" }, { label: "NOW.md", href: "https://github.com/" + REPO + "/blob/main/NOW.md" });
+          d.links.push({ label: "RULINGS.md", href: "https://github.com/" + REPO + "/blob/main/RULINGS.md", home: "rulings" }, { label: "NOW.md", href: "https://github.com/" + REPO + "/blob/main/NOW.md", home: "now" });
         }
         if (d.quiet) d.pill.state = "quiet";
         return d;
@@ -901,7 +1178,126 @@ Deno.serve(async (req: Request) => {
       }
 
       const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total, held: held.total };
-      return j({ date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v12", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now }, headers);
+      return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v13", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, matrix, matrix_ready: matrixReady === true, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now };
+}
+
+Deno.serve(async (req: Request) => {
+  const headers = headersFor(req.headers.get("origin"));
+  if (req.method === "OPTIONS") return new Response("ok", { headers });
+  if (req.method === "GET") {
+    const u = new URL(req.url);
+    if (u.searchParams.get("op") !== "photo") return j({ error: "POST, or GET ?op=photo" }, headers, 405);
+    // The token travels only in a header, never in the URL: URLs land in logs.
+    const given = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "") || req.headers.get("x-device-token") || "";
+    const hashesG = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const acceptedG = hashesG.length ? hashesG : FACE_HASHES;
+    const serviceG = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const okTok = !!given && (acceptedG.includes(await sha256hex(given)) || (given === serviceG) || (given.length > 20 && await serviceProbe(given)));
+    if (!okTok) return j({ error: "bad token" }, headers, 403);
+    const path = u.searchParams.get("path") || "";
+    if (!isVaultImage(path)) return j({ error: "not a vault image" }, headers, 400);
+    const gh = await ghToken();
+    if (!gh) return j({ error: "MORNING_GH_TOKEN not set" }, headers, 503);
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, { headers: { authorization: "Bearer " + gh, "user-agent": "morning-api", accept: "application/vnd.github.raw+json" } });
+    if (!r.ok) return j({ error: "vault " + r.status }, headers, r.status === 404 ? 404 : 502);
+    const ext = path.split(".").pop()!.toLowerCase();
+    return new Response(r.body, { status: 200, headers: { "Access-Control-Allow-Origin": headers["Access-Control-Allow-Origin"], "Content-Type": IMAGE_TYPE[ext] || "application/octet-stream", "Cache-Control": "private, max-age=3600" } });
+  }
+  if (req.method !== "POST") return j({ error: "POST only" }, headers, 405);
+  let body: any;
+  try { body = await req.json(); } catch { return j({ error: "bad json" }, headers, 400); }
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  const hashes = (Deno.env.get("MORNING_TOKEN_HASHES") || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const accepted = hashes.length ? hashes : FACE_HASHES;
+  const bearer = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const viaToken = !!body.token && accepted.includes(await sha256hex(String(body.token)));
+  // The Chart House Pages function speaks with the service role as a bearer. The key it holds may
+  // be the legacy JWT or the newer secret; either way, a bearer that can read an RLS-sealed table
+  // through PostgREST is the service role, and nothing else is.
+  let viaService = !!serviceKey && bearer.length > 20 && bearer === serviceKey;
+  if (!viaService && !viaToken && bearer.length > 20) viaService = await serviceProbe(bearer);
+  if (!viaService && !viaToken) return j({ error: "bad token" }, headers, 403);
+  const sb = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
+  const today = body.date && /^\d{4}-\d{2}-\d{2}$/.test(body.date) ? body.date : ptToday();
+  const now = new Date().toISOString();
+  const source = String(body.source || (viaService ? "chart-house" : "face")).slice(0, 40);
+
+  try {
+    if (body.op === "morning" || body.op === "by_pillar" || body.op === "by_track") {
+      const out = await compose(sb, body, viaService, today, now);
+      if (body.op === "morning") return j(out, headers);
+      const by = body.op === "by_pillar" ? "pillar" : "track";
+      const only = body[by] != null ? String(body[by]) : undefined;
+      if (only && !(by === "pillar" ? LINE : TRACK_SET).has(only)) return j({ error: "no such " + by + ": " + only }, headers, 400);
+      return j(regroup(out, by as "pillar" | "track", only), headers);
+    }
+
+    if (body.op === "homes") {
+      const r = await sb.from("homes").select("*").order("sort");
+      if (r.error) return j({ homes: [], ready: false, error: String(r.error.message || "").slice(0, 120), served_at: now }, headers);
+      const rows = r.data ?? [];
+      const touched = await homesTouched(sb, rows);
+      return j({ homes: rows.map((h: any) => ({ id: h.id, name: h.name, what: h.what, url: h.url, kind: h.kind, state: h.state, group: h.group, parent: h.parent, active: !!h.active, last_touched: touched.get(h.id) ?? h.last_touched ?? null, pillar: h.pillar, writes: h.writes, reads: h.reads, sort: h.sort })), ready: true, served_at: now }, headers);
+    }
+
+    if (body.op === "post") {
+      // the direct-post door: on his tap, one named card, never a batch, never a schedule
+      const id = String(body.card_id || "");
+      if (!id.startsWith("content:")) return j({ error: "only a content card is posted" }, headers, 400);
+      const leadId = id.slice(8);
+      const lead = (await sb.from("content_calendar").select("*").eq("id", leadId).maybeSingle()).data;
+      if (!lead) return j({ error: "no such card" }, headers, 404);
+      const sibs = (await sb.from("content_calendar").select("*").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).not("status", "in", "(archived)")).data ?? [];
+      const group = sibs.filter((r: any) => groupKey(r) === groupKey(lead));
+      const wanted = body.post_id ? [String(body.post_id)] : (Array.isArray(body.post_ids) ? body.post_ids.map(String) : group.map((r: any) => r.id));
+      const targets = group.filter((r: any) => wanted.includes(r.id));
+      if (!targets.length) return j({ error: "no post named" }, headers, 400);
+      const dry = !!body.dry_run;
+      const lm = lead.metadata || {};
+      const photoPath = lm.image || lm.frame || null;
+      const hubRow = (await sb.from("hub_content").select("content").eq("key", "wayofdad").maybeSingle()).data;
+      const hubCards = new Map<number, any>(); for (const c of (hubRow?.content?.cards || [])) hubCards.set(Number(c.day), c);
+      const hub = lm.day != null && doorOf(lead) === "wayofdad" ? hubCards.get(Number(lm.day)) : null;
+      const results: any[] = [];
+      for (const r of targets) {
+        const platform = String(r.platform || ""); const m = r.metadata || {};
+        const account = m.account ? String(m.account) : null;
+        const res: any = { post_id: r.id, platform, account, ok: false };
+        if (r.status === "published") { res.error = "already published; reopen first"; results.push(res); continue; }
+        const poster = POSTERS[platform];
+        if (!poster) { res.error = "no door for " + (PLATFORM_LABEL[platform] || platform) + " yet" + (POST_HINT[platform] ? "; his hand: " + POST_HINT[platform] : ""); results.push(res); continue; }
+        if (!account) { res.error = "no account on the row (metadata.account); nothing posts"; results.push(res); continue; }
+        const secretName = secretNameFor(platform, account); res.secret = secretName;
+        const secret = Deno.env.get(secretName) || "";
+        let text: string | null = null;
+        if (hub) text = (platform === "instagram" ? hub.ig : hub.x) || null;
+        if (!text) for (const p of copyPaths(r)) { text = await vaultText(p); if (text) break; }
+        if (!text && r.excerpt) text = String(r.excerpt);
+        if (!text) { res.error = "no copy for this post (no vault file, no excerpt)"; results.push(res); continue; }
+        text = text.trim();
+        const photoIsVault = photoPath ? isVaultImage(String(photoPath)) : false;
+        res.text = text; res.chars = graphemes(text); res.photo = photoPath ? String(photoPath) : null; res.photo_bytes_here = photoIsVault;
+        if (photoPath && !photoIsVault) res.note = "the photo lives outside the vault (iCloud); post this one from 29:11's share sheet, or post text alone by naming post_id with text_only";
+        if (!secret) { res.error = "secret " + secretName + " is not set; his hand sets it (supabase secrets set)"; results.push(res); continue; }
+        if (dry) { res.ok = true; res.dry_run = true; results.push(res); continue; }
+        if (photoPath && !photoIsVault && !body.text_only) { res.error = "the photo has no bytes here; share from 29:11, or pass text_only true"; results.push(res); continue; }
+        try {
+          const img = photoIsVault ? await vaultImageBytes(String(photoPath)) : null;
+          const out = await poster(secret, text, img ? { bytes: img.bytes, type: img.type, alt: (hub ? hub.alt : null) || m.alt || null } : null);
+          const meta = Object.assign({}, m, { chart_house: { at: now, action: "morning: posted by the door (" + source + ")" }, direct_post: { at: now, platform, account, id: out.id, url: out.url }, stage: "ratified" });
+          const u = await sb.from("content_calendar").update({ status: "published", published_at: now, url: out.url.slice(0, 500), metadata: meta, updated_at: now }).eq("id", r.id);
+          if (u.error) { res.ok = false; res.error = "posted (" + out.url + ") but the row did not close: " + u.error.message; res.url = out.url; }
+          else { res.ok = true; res.url = out.url; res.id = out.id; }
+        } catch (e) { res.error = String((e as any)?.message || e).slice(0, 300); }
+        results.push(res);
+      }
+      // the hub's day ledger rides along as it does on the Posted tap
+      if (!dry && lm.day != null && doorOf(lead) === "wayofdad" && results.some((x) => x.ok)) {
+        const allOut = ((await sb.from("content_calendar").select("status, metadata").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).eq("campaign", lead.campaign)).data ?? []).filter((x: any) => String(x.metadata?.day) === String(lm.day));
+        if (allOut.length && allOut.every((x: any) => x.status === "published")) await sb.from("hub_days").upsert({ hub: "wayofdad", day: Number(lm.day), done: true, done_at: now, source: "the door (" + source + ")", updated_at: now }, { onConflict: "hub,day" });
+      }
+      const fresh = await contentCards(sb, today, hubCards, true, group.map((r: any) => r.id));
+      return j({ ok: results.every((x) => x.ok), dry_run: dry, card: fresh[0] || null, results }, headers);
     }
 
     if (body.op === "text") {
@@ -982,10 +1378,24 @@ Deno.serve(async (req: Request) => {
         // the one table first; the Morning's own table only until one_today_01 lands
         const t = (await sb.from("checklist_templates").select("*").eq("id", rid).maybeSingle()).data;
         if (t) {
-          if (action === "undo" || action === "reopen") { await sb.from("checklist_completions").delete().eq("template_id", rid).eq("date", today); return j({ ok: true, card: checklistCard(t, null, today) }, headers); }
+          if (action === "undo" || action === "reopen") {
+            const prev = (await sb.from("checklist_completions").select("*").eq("template_id", rid).eq("date", today).maybeSingle()).data;
+            await sb.from("checklist_completions").delete().eq("template_id", rid).eq("date", today);
+            // a Hold that stretched the window is put back
+            if (prev && prev.action === "hold" && prev.ends_on_was && t.ends_on === prev.held_to) { await sb.from("checklist_templates").update({ ends_on: prev.ends_on_was }).eq("id", rid); t.ends_on = prev.ends_on_was; }
+            return j({ ok: true, card: checklistCard(t, null, today) }, headers);
+          }
           if (!["done", "skip", "hold"].includes(action)) return j({ error: "unknown action for routine" }, headers, 400);
           const value = body.value != null ? String(body.value).slice(0, 80) : null;
-          const row = await writeCompletion(sb, rid, today, now, action !== "done", value, source);
+          if (action === "hold") {
+            // Hold means not today, tomorrow (v13): the mark says hold, and a window that would end before the held day stretches to it
+            const heldTo = addDays(today, Math.max(1, Number(body.value) || 1));
+            const endsWas = t.ends_on && t.ends_on < heldTo ? t.ends_on : null;
+            const row = await writeCompletion(sb, rid, today, now, true, null, source, { action: "hold", held_to: heldTo, ends_on_was: endsWas });
+            if (endsWas && row.action === "hold") { await sb.from("checklist_templates").update({ ends_on: heldTo }).eq("id", rid); t.ends_on = heldTo; }
+            return j({ ok: true, card: checklistCard(t, row, today) }, headers);
+          }
+          const row = await writeCompletion(sb, rid, today, now, action !== "done", value, source, { action });
           return j({ ok: true, card: checklistCard(t, row, today) }, headers);
         }
         const legacy = await sb.from("morning_routines").select("*").eq("id", rid).maybeSingle();
