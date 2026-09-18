@@ -97,6 +97,21 @@ async function readEpisodeTimeline(sb: any, episodeId: string) {
   return { ep: ep.data ?? null, lines: rows.map((r) => r.line), entryCount: (entries.data ?? []).length, replyCount: (replies.data ?? []).length };
 }
 
+/* The summaries carry their episode's dates through the foreign key, so the
+   guide can say when a loop happened rather than when it was written down. If
+   the embed is not available yet, which is what a cold schema cache looks like
+   in the minutes after the migration lands, fall back to the plain read rather
+   than losing his memory for an hour. */
+async function summariesQuery(sb: any) {
+  const withEp = await sb.from("eddy_episode_summaries")
+    .select("episode_id, at, summary, decisions, open_threads, eddy_episodes(opened_at, closed_at)")
+    .order("at", { ascending: false }).limit(5);
+  if (!withEp.error) return withEp;
+  return await sb.from("eddy_episode_summaries")
+    .select("episode_id, at, summary, decisions, open_threads")
+    .order("at", { ascending: false }).limit(5);
+}
+
 Deno.serve(async (req: Request) => {
   const headers = cors(req.headers.get("origin"));
   if (req.method === "OPTIONS") return new Response("ok", { headers });
@@ -190,7 +205,7 @@ Deno.serve(async (req: Request) => {
       sb.from("eddy_parks").select("arrived"),
       sb.from("eddy_replies").select("ask, reply, at, ask_repeat").order("at", { ascending: false }).limit(6),
       sb.from("eddy_rules").select("at, scope, text, his_words, source").eq("active", true).order("at"),
-      sb.from("eddy_episode_summaries").select("episode_id, at, summary, decisions, open_threads, eddy_episodes(opened_at, closed_at)").order("at", { ascending: false }).limit(5),
+      summariesQuery(sb),
       sb.from("desk_boxes").select("id, title, why").eq("archived", false),
     ]);
 
