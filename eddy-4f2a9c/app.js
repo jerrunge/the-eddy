@@ -373,8 +373,12 @@ async function loadHold() {
 function ruleCard(r) {
   const card = document.createElement("div"); card.className = "rule-card";
   const meta = document.createElement("div"); meta.className = "meta";
+  // the stored time is UTC, so an evening rule would read as the next day if the
+  // string were simply sliced; format it in his own zone instead
+  let when = String(r.at || "").slice(0, 10);
+  try { when = new Date(r.at).toLocaleDateString("en-CA"); } catch { }
   meta.textContent = (Array.isArray(r.scope) ? r.scope.join(" / ") : "always") + " · " +
-    String(r.at || "").slice(0, 10) + " · " + (r.his_words ? "your words" : "the shape you ratified");
+    when + " · " + (r.his_words ? "your words" : "the shape you ratified");
   const text = document.createElement("div"); text.className = "text"; text.textContent = r.text || "";
   const retire = document.createElement("button"); retire.className = "retire"; retire.textContent = "Retire";
   let armed = false;
