@@ -1,4 +1,4 @@
-// eddy-dispatch v2: the park appointment rail, and the backstop that closes a
+// eddy-dispatch v3: the park appointment rail, and the backstop that closes a
 // loop he walked away from. Called by pg_cron every 5 minutes (net.http_post,
 // the estate's proven pattern). Finds parks that have come due, sends Web Push
 // to every subscribed device, and stamps notified_at. The in-app arrival banner
@@ -15,6 +15,8 @@
 // entry for eight hours is closed as "idle", dated to his last word rather than
 // to now, and handed to the guide's summarize op so the loop still becomes
 // memory. Nothing here scores him and nothing deletes anything.
+// v3 (2026-09-17, homebase): closed loops with words and no summary yet get one, three a tick,
+// so the 09-14 loop he closed before the memory existed becomes memory too.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
@@ -94,7 +96,31 @@ Deno.serve(async (req: Request) => {
       idle.push({ id: ep.id, minutes, summarized });
     }
 
-    return new Response(JSON.stringify({ due: dueParks.length, subs: subscriptions.length, sent, failed, pruned, idle_closed: idle.length, idle }), { headers });
+    /* ---- the missing summaries: a loop closed before the memory existed, or a
+       close whose summarize call failed, still becomes memory. Three a tick. ---- */
+    const backfilled: any[] = [];
+    if (!body.no_summary) {
+      const closed = await sb.from("eddy_episodes").select("id, closed_at").not("closed_at", "is", null).order("closed_at", { ascending: false }).limit(30);
+      for (const ep of ((closed.data ?? []) as any[])) {
+        if (backfilled.length >= 3) break;
+        const has = await sb.from("eddy_episode_summaries").select("episode_id").eq("episode_id", ep.id).maybeSingle();
+        if (has.data) continue;
+        const said = await sb.from("eddy_entries").select("id").eq("episode_id", ep.id).limit(1);
+        if (!(said.data ?? []).length) continue;
+        let ok = false;
+        try {
+          const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/eddy-guide`, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+            body: JSON.stringify({ op: "summarize", episode_id: ep.id, service_key: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") }),
+          });
+          ok = r.ok;
+        } catch { ok = false; }
+        backfilled.push({ id: ep.id, summarized: ok });
+      }
+    }
+
+    return new Response(JSON.stringify({ due: dueParks.length, subs: subscriptions.length, sent, failed, pruned, idle_closed: idle.length, idle, backfilled }), { headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e).slice(0, 300) }), { status: 500, headers });
   }
