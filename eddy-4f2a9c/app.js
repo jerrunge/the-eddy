@@ -36,18 +36,21 @@ async function qAll() { const d = await idb(); return new Promise((res) => { con
 async function qDel(qids) { const d = await idb(); return new Promise((res) => { const t = d.transaction("queue", "readwrite"); for (const id of qids) t.objectStore("queue").delete(id); t.oncomplete = res; }); }
 
 /* ---------- sync engine ---------- */
-let syncing = false;
+/* One chain, never two flushes at once: awaiting flush() therefore waits for
+   everything already queued, which is what lets Close it ask for a summary only
+   after his last words are actually in. */
+let flushChain = Promise.resolve();
 async function enqueue(kind, payload) {
   const op = { qid: crypto.randomUUID(), kind, ...payload };
   await qPut(op);
   flush();
   return op;
 }
-async function flush() {
-  if (syncing || !navigator.onLine || !token()) return;
+function flush() { flushChain = flushChain.then(doFlush, doFlush); return flushChain; }
+async function doFlush() {
+  if (!navigator.onLine || !token()) return;
   const ops = await qAll();
   if (!ops.length) { setSyncState("Everything is in."); return; }
-  syncing = true;
   setSyncState(ops.length + " waiting to sync...");
   try {
     const r = await fetch(FN + "/eddy-api", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: token(), op: "sync", ops }) });
@@ -58,7 +61,6 @@ async function flush() {
       setSyncState(left ? left + " still waiting." : "Everything is in.");
     }
   } catch { setSyncState("Offline. Held safely here."); }
-  syncing = false;
 }
 setInterval(flush, 20000);
 addEventListener("online", flush);
@@ -72,7 +74,7 @@ async function api(op, extra = {}) {
 }
 
 /* ---------- views ---------- */
-const views = ["land", "ep", "park", "held", "arrive", "watch", "ride", "record", "settings"];
+const views = ["land", "ep", "park", "held", "arrive", "watch", "ride", "record", "closed", "hold", "settings"];
 let stack = ["land"];
 function show(v) {
   for (const x of views) document.getElementById("v-" + x).classList.toggle("hidden", x !== v);
@@ -84,6 +86,7 @@ document.querySelectorAll("[data-back]").forEach((b) => b.addEventListener("clic
 document.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => {
   const v = b.dataset.nav;
   if (v === "record") loadRecord();
+  if (v === "hold") loadHold();
   if (v === "ride") prepRide();
   if (v === "watch") startWatch("");
   show(v);
@@ -106,6 +109,7 @@ function renderContext() {
   if (ctx?.capacity) bits.push(ctx.capacity);
   el.textContent = bits.join(" · ");
   renderContinue();
+  renderCloseLand();
   const banner = document.getElementById("parks-banner");
   const due = ctx?.parks_due || [];
   if (due.length) {
@@ -209,17 +213,197 @@ dumpEl.addEventListener("input", () => {
 });
 document.getElementById("btn-send").addEventListener("click", () => { clearTimeout(draftTimer); const t = commitDraft("typed"); askGuide("open", t || ""); });
 document.getElementById("btn-in").addEventListener("click", startEpisode);
-document.getElementById("btn-done").addEventListener("click", () => closeEpisode("let_go"));
+document.getElementById("btn-close-ep").addEventListener("click", () => closeIt());
+document.getElementById("btn-close-land").addEventListener("click", () => closeIt());
 
-async function closeEpisode(endedBy) {
-  if (!ep) return show("land");
-  clearTimeout(draftTimer); commitDraft("typed");
-  const minutes = Math.max(1, Math.round((Date.now() - new Date(ep.opened_at).getTime()) / 60000));
+/* ---------- close it ----------
+   His word, 09-17: "Make sure there is a close it mechanism in place, or a
+   button for me to press when complete, so the function actually works."
+   Closing is what turns a loop into memory: the episode gets an end, and the
+   guide writes the summary that later conversations read. eddy-dispatch closes
+   an eight-hour-quiet loop the same way, for the nights he just puts it down. */
+async function openEpisodeRef() {
+  if (ep) return ep;
+  const saved = await kvGet("open_episode");
+  if (saved && saved.id) return saved;
+  const le = ctx && ctx.last_episode;
+  return le && !le.closed_at ? { id: le.id, opened_at: le.opened_at } : null;
+}
+async function renderCloseLand() {
+  const b = document.getElementById("btn-close-land"); if (!b) return;
+  const e = await openEpisodeRef();
+  if (!e) { b.classList.add("hidden"); return; }
+  const when = new Date(e.opened_at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
+  b.innerHTML = "";
+  b.appendChild(document.createTextNode("Close it"));
+  const sub = document.createElement("span"); sub.className = "sub";
+  sub.textContent = "the loop you opened " + when;
+  b.appendChild(sub);
+  b.classList.remove("hidden");
+}
+async function closeIt() {
+  const e = await openEpisodeRef();
+  if (!e) return show("land");
+  if (ep) { clearTimeout(draftTimer); commitDraft("typed"); }
+  const minutes = Math.max(1, Math.round((Date.now() - new Date(e.opened_at).getTime()) / 60000));
   const mode = usedVoice && usedType ? "mixed" : usedVoice ? "voice" : "typed";
-  enqueue("episode_close", { id: ep.id, closed_at: new Date().toISOString(), ended_by: endedBy, minutes, entry_mode: mode });
+  enqueue("episode_close", { id: e.id, closed_at: new Date().toISOString(), ended_by: "closed", minutes, entry_mode: mode });
   await kvSet("open_episode", null);
   ep = null; usedVoice = usedType = false;
-  show("land"); loadContext();
+  showClosing(e);
+  await flush();
+  summarizeInto(e.id);
+  loadContext();
+}
+function showClosing(e) {
+  const body = document.getElementById("closed-body");
+  body.innerHTML = "";
+  const h = document.createElement("h1"); h.className = "closed-title";
+  h.innerHTML = "Closed.<br>It is held.";
+  const lead = document.createElement("p"); lead.className = "lead";
+  lead.textContent = "The loop you opened " + new Date(e.opened_at).toLocaleString("en-US", { weekday: "long", hour: "numeric", minute: "2-digit" }) + " is written down. You will not have to explain it again.";
+  const slot = document.createElement("div"); slot.id = "sum-slot";
+  slot.innerHTML = '<p class="lead">Reading the loop back...</p>';
+  const done = document.createElement("button"); done.className = "big-btn small";
+  done.textContent = "Back to the water";
+  done.addEventListener("click", () => { show("land"); loadContext(); });
+  body.append(h, lead, slot, done);
+  show("closed");
+}
+async function summarizeInto(episodeId) {
+  const slot = document.getElementById("sum-slot");
+  try {
+    const r = await fetch(FN + "/eddy-guide", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: token(), op: "summarize", episode_id: episodeId }) });
+    const j = await r.json();
+    if (!j.summary) throw new Error(j.error || "no summary");
+    renderSummary(slot, j, episodeId);
+  } catch {
+    slot.innerHTML = "";
+    const p = document.createElement("p"); p.className = "lead";
+    p.textContent = "Closed and held here. The written version needs the wire; it will be waiting under The record.";
+    const again = document.createElement("button"); again.className = "move-btn"; again.textContent = "Try again";
+    again.addEventListener("click", () => { slot.innerHTML = '<p class="lead">Reading the loop back...</p>'; summarizeInto(episodeId); });
+    slot.append(p, again);
+  }
+}
+function listBlock(slot, label, items) {
+  if (!Array.isArray(items) || !items.length) return;
+  const h = document.createElement("p"); h.className = "sum-head"; h.textContent = label;
+  const ul = document.createElement("ul"); ul.className = "sum-list";
+  for (const it of items) { const li = document.createElement("li"); li.textContent = String(it); ul.appendChild(li); }
+  slot.append(h, ul);
+}
+function renderSummary(slot, j, episodeId) {
+  slot.innerHTML = "";
+  const card = document.createElement("div"); card.className = "sum-card"; card.textContent = j.summary || "";
+  slot.appendChild(card);
+  listBlock(slot, "What you decided", j.decisions);
+  listBlock(slot, "Still open", j.open_threads);
+  const cands = Array.isArray(j.rule_candidates) ? j.rule_candidates : [];
+  if (!cands.length) return;
+  const h = document.createElement("p"); h.className = "sum-head"; h.textContent = "Sounded like a rule you set";
+  const note = document.createElement("p"); note.className = "lead";
+  note.textContent = "Only if you say so. Nothing here is held until you keep it, and you can change the words first.";
+  slot.append(h, note);
+  for (const c of cands) slot.appendChild(candidateCard(c, episodeId));
+}
+function candidateCard(c, episodeId) {
+  const card = document.createElement("div"); card.className = "cand";
+  const txt = document.createElement("div"); txt.className = "txt"; txt.textContent = c.text || "";
+  const row = document.createElement("div"); row.className = "row";
+  const keep = document.createElement("button"); keep.className = "chip"; keep.textContent = "Keep as a rule";
+  const no = document.createElement("button"); no.className = "quiet-btn"; no.textContent = "Not this";
+  row.append(keep, no);
+  card.append(txt, row);
+  no.addEventListener("click", () => card.remove());
+  keep.addEventListener("click", () => {
+    card.innerHTML = "";
+    const ta = document.createElement("textarea"); ta.value = c.text || ""; ta.setAttribute("aria-label", "The rule, in your words");
+    const scope = document.createElement("input"); scope.className = "dt";
+    scope.value = (Array.isArray(c.scope) ? c.scope : ["always"]).join(", ");
+    scope.setAttribute("aria-label", "Who or what it is about");
+    const hint = document.createElement("p"); hint.className = "dim";
+    hint.textContent = "Who or what it is about. The guide reads a rule when the moment names it. Use always for one that rides everywhere.";
+    const row2 = document.createElement("div"); row2.className = "row";
+    const save = document.createElement("button"); save.className = "chip sel"; save.textContent = "Hold it";
+    const cancel = document.createElement("button"); cancel.className = "quiet-btn"; cancel.textContent = "Never mind";
+    row2.append(save, cancel);
+    card.append(ta, scope, hint, row2);
+    cancel.addEventListener("click", () => card.remove());
+    save.addEventListener("click", async () => {
+      const text = ta.value.trim(); if (!text) return;
+      save.textContent = "Holding...";
+      const edited = text !== (c.text || "");
+      try {
+        await api("rule_add", {
+          text,
+          scope: scope.value.split(",").map((x) => x.trim()).filter(Boolean),
+          his_words: !!c.his_words && !edited,
+          source: "kept from the loop of " + new Date().toLocaleDateString("en-CA") + (episodeId ? " (" + episodeId.slice(0, 8) + ")" : ""),
+        });
+        card.innerHTML = "";
+        const ok = document.createElement("div"); ok.className = "txt"; ok.textContent = "Held. It is in What I hold.";
+        card.appendChild(ok);
+      } catch { save.textContent = "The wire is quiet. Try again"; }
+    });
+  });
+  return card;
+}
+
+/* ---------- what I hold ---------- */
+async function loadHold() {
+  const body = document.getElementById("hold-body");
+  body.innerHTML = '<p class="lead">Reading...</p>';
+  let d = null;
+  try { d = await api("rules_list"); await kvSet("rules", d); } catch { d = await kvGet("rules"); }
+  body.innerHTML = "";
+  const lead = document.createElement("p"); lead.className = "lead";
+  lead.textContent = d
+    ? "Yours. The guide reads these before it answers and holds you to them. Nothing was written here for you."
+    : "Offline. What you hold lives on the server; it will be here when the water clears.";
+  body.appendChild(lead);
+  for (const r of (d?.rules || [])) body.appendChild(ruleCard(r));
+  if (d && !(d.rules || []).length) {
+    const p = document.createElement("p"); p.className = "dim";
+    p.textContent = "Nothing held yet. Close a loop and keep what you said, or write one below.";
+    body.appendChild(p);
+  }
+  if (d) body.appendChild(addRuleBlock());
+}
+function ruleCard(r) {
+  const card = document.createElement("div"); card.className = "rule-card";
+  const meta = document.createElement("div"); meta.className = "meta";
+  meta.textContent = (Array.isArray(r.scope) ? r.scope.join(" / ") : "always") + " · " +
+    String(r.at || "").slice(0, 10) + " · " + (r.his_words ? "your words" : "the shape you ratified");
+  const text = document.createElement("div"); text.className = "text"; text.textContent = r.text || "";
+  const retire = document.createElement("button"); retire.className = "retire"; retire.textContent = "Retire";
+  let armed = false;
+  retire.addEventListener("click", async () => {
+    if (!armed) { armed = true; retire.classList.add("armed"); retire.textContent = "Retire it?"; return; }
+    retire.textContent = "Retiring...";
+    try { await api("rule_retire", { id: r.id }); card.remove(); } catch { retire.textContent = "The wire is quiet. Try again"; }
+  });
+  card.append(meta, text, retire);
+  return card;
+}
+function addRuleBlock() {
+  const wrap = document.createElement("div"); wrap.className = "set-block";
+  const b = document.createElement("b"); b.textContent = "Hold something new";
+  const ta = document.createElement("textarea"); ta.className = "dt"; ta.rows = 3;
+  ta.placeholder = "In your words."; ta.setAttribute("aria-label", "The rule, in your words");
+  const scope = document.createElement("input"); scope.className = "dt";
+  scope.placeholder = "About who or what (David, always)"; scope.setAttribute("aria-label", "Who or what it is about");
+  const save = document.createElement("button"); save.className = "move-btn"; save.textContent = "Hold this";
+  save.addEventListener("click", async () => {
+    const text = ta.value.trim(); if (!text) return;
+    save.textContent = "Holding...";
+    try {
+      await api("rule_add", { text, scope: scope.value.split(",").map((x) => x.trim()).filter(Boolean), his_words: true, source: "typed in the app" });
+      loadHold();
+    } catch { save.textContent = "The wire is quiet. Try again"; }
+  });
+  wrap.append(b, ta, scope, save);
+  return wrap;
 }
 
 /* ---------- the guide ---------- */
@@ -319,6 +503,7 @@ async function closeEpisodeForPark() {
   const minutes = Math.max(1, Math.round((Date.now() - new Date(ep.opened_at).getTime()) / 60000));
   enqueue("episode_close", { id: ep.id, closed_at: new Date().toISOString(), ended_by: "parked", minutes, entry_mode: usedVoice && usedType ? "mixed" : usedVoice ? "voice" : "typed" });
   await kvSet("open_episode", null); ep = null; usedVoice = usedType = false;
+  renderCloseLand();
 }
 document.getElementById("btn-held-done").addEventListener("click", () => { show("land"); loadContext(); });
 

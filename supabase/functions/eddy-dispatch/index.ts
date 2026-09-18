@@ -1,13 +1,25 @@
-// eddy-dispatch v1: the park appointment rail. Called by pg_cron every 5 minutes
-// (net.http_post, the estate's proven pattern). Finds parks that have come due,
-// sends Web Push to every subscribed device, and stamps notified_at. The in-app
-// arrival banner is the belt-and-braces surface; this is the knock.
+// eddy-dispatch v2: the park appointment rail, and the backstop that closes a
+// loop he walked away from. Called by pg_cron every 5 minutes (net.http_post,
+// the estate's proven pattern). Finds parks that have come due, sends Web Push
+// to every subscribed device, and stamps notified_at. The in-app arrival banner
+// is the belt-and-braces surface; this is the knock.
 // Auth: the dispatch secret lives ONLY in eddy_config (generated server-side by
 // gen_random_bytes; it never left the database). The cron reads it at runtime and
 // this function compares against the same row. verify_jwt=false.
+//
+// v2 (2026-09-17, his word "make sure there is a close it mechanism in place, or
+// a button for me to press when complete, so the function actually works"): the
+// idle close. Seven of the eight episodes since 08-28 were never closed, so
+// everything keyed to a close never fired. The button is his; this is the
+// backstop for the nights he puts the phone down instead. Any episode with no
+// entry for eight hours is closed as "idle", dated to his last word rather than
+// to now, and handed to the guide's summarize op so the loop still becomes
+// memory. Nothing here scores him and nothing deletes anything.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+
+const IDLE_HOURS = 8;
 
 Deno.serve(async (req: Request) => {
   const headers = { "Content-Type": "application/json" };
@@ -57,7 +69,32 @@ Deno.serve(async (req: Request) => {
       }
       await sb.from("eddy_parks").update({ notified_at: new Date().toISOString() }).eq("id", park.id);
     }
-    return new Response(JSON.stringify({ due: dueParks.length, subs: subscriptions.length, sent, failed, pruned }), { headers });
+
+    /* ---- the idle close: a loop he walked away from still gets remembered -- */
+    const idle: any[] = [];
+    const cutoff = Date.now() - IDLE_HOURS * 3600000;
+    const open = await sb.from("eddy_episodes").select("id, opened_at").is("closed_at", null).order("opened_at").limit(20);
+    for (const ep of ((open.data ?? []) as any[])) {
+      const last = await sb.from("eddy_entries").select("at").eq("episode_id", ep.id).order("at", { ascending: false }).limit(1).maybeSingle();
+      const lastAt = last.data?.at ?? ep.opened_at;
+      if (new Date(lastAt).getTime() > cutoff) continue;
+      const minutes = Math.max(1, Math.round((new Date(lastAt).getTime() - new Date(ep.opened_at).getTime()) / 60000));
+      await sb.from("eddy_episodes").update({ closed_at: lastAt, ended_by: "idle", minutes }).eq("id", ep.id);
+      let summarized = false;
+      if (last.data?.at && !body.no_summary) {
+        try {
+          const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/eddy-guide`, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+            body: JSON.stringify({ op: "summarize", episode_id: ep.id, service_key: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") }),
+          });
+          summarized = r.ok;
+        } catch { summarized = false; }
+      }
+      idle.push({ id: ep.id, minutes, summarized });
+    }
+
+    return new Response(JSON.stringify({ due: dueParks.length, subs: subscriptions.length, sent, failed, pruned, idle_closed: idle.length, idle }), { headers });
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e).slice(0, 300) }), { status: 500, headers });
   }

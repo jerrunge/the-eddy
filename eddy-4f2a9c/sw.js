@@ -1,6 +1,6 @@
 /* The Eddy service worker v1. Shell cached for offline capture; push carries the
    park knocks. Bump VERSION on every deploy (the fortify-room lesson). */
-const VERSION = "eddy-v7"; // v7: activate clears only eddy- caches; 29:11 shares this origin
+const VERSION = "eddy-v8"; // v8: Close it, the summary, and What I hold
 const SHELL = ["./", "index.html", "styles.css", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

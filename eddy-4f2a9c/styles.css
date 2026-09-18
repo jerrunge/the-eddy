@@ -107,3 +107,27 @@ button:focus-visible, textarea:focus-visible, input:focus-visible{outline:2px so
 .dim{color:var(--dim); font-size:.9rem; margin:0}
 
 @media (prefers-reduced-motion:reduce){ .talk-btn.listening{animation:none} }
+
+/* Close it, and what he holds (2026-09-17, his word). The close is warm, not
+   loud: it is the end of a loop, not an alarm. */
+.close-btn{
+  width:100%; max-width:340px; padding:14px 16px; border-radius:20px;
+  border:1.5px solid var(--ember); color:var(--ember); background:rgba(233,161,107,.05);
+  font-size:1rem; font-weight:600; text-align:left; line-height:1.35;
+}
+.close-btn:active{background:rgba(233,161,107,.16)}
+.close-btn .sub{display:block; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); margin-top:4px}
+.closed-title{font-family:"Fraunces",Georgia,serif; font-size:1.9rem; font-weight:600; margin:0; line-height:1.15}
+.sum-card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; font-size:.95rem; white-space:pre-wrap}
+.sum-head{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.64rem; letter-spacing:.14em; text-transform:uppercase; color:var(--water); margin:6px 0 0}
+.sum-list{margin:0; padding-left:18px; color:var(--dim); font-size:.92rem; display:flex; flex-direction:column; gap:6px}
+.sum-list li{color:var(--dim)}
+.cand{background:var(--panel); border:1px solid var(--water-deep); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:10px}
+.cand .txt{font-size:.95rem}
+.cand .row{display:flex; gap:8px; flex-wrap:wrap}
+.cand textarea{background:var(--pool); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:10px; font:inherit; font-size:.95rem; width:100%; min-height:88px; resize:vertical}
+.rule-card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:8px}
+.rule-card .meta{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; color:var(--faint)}
+.rule-card .text{font-size:.95rem; white-space:pre-wrap}
+.rule-card .retire{align-self:flex-start; color:var(--dim); font-size:.8rem; padding:6px 10px; border-radius:10px; border:1px solid var(--line)}
+.rule-card .retire.armed{color:var(--ember); border-color:var(--ember)}

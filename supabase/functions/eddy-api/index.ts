@@ -1,4 +1,4 @@
-// eddy-api v3: the Eddy's single data door.
+// eddy-api v4: the Eddy's single data door.
 // Auth: device token checked against an embedded SHA-256 hash (the room-cabinet
 // pattern). Tables are RLS-enabled with zero policies, so only this function's
 // service role reaches them. verify_jwt=false is deliberate and load-bearing.
@@ -8,6 +8,10 @@
 // order, so a reopened Eddy redraws the conversation it was in (continuity).
 // v3 (2026-09-07): context carries the last episode so the landing can offer to
 // continue it; sync accepts episode_reopen so a closed loop can be picked back up.
+// v4 (2026-09-17, his word): the memory door. rules_list, rule_add, rule_retire
+// read and write what he holds (eddy_rules); summary_get reads one closed loop
+// back (eddy_episode_summaries). Retiring a rule is a flag, never a delete. The
+// app writes a rule only on his tap, with his edit, and nothing else ever does.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -136,6 +140,50 @@ Deno.serve(async (req: Request) => {
         ? await sb.from("eddy_entries").select("episode_id, at, text").in("episode_id", ids.slice(0, 60)).order("at")
         : { data: [] };
       return new Response(JSON.stringify({ episodes: eps.data ?? [], entries: entries.data ?? [], marks: marks.data ?? [], beliefs: beliefs.data ?? [], parks: parks.data ?? [] }), { headers });
+    }
+
+    /* ---- the memory door (v4, his word 2026-09-17) ----------------------- */
+    if (body.op === "rules_list") {
+      const all = String(body.all ?? "") === "1" || body.all === true;
+      let q = sb.from("eddy_rules").select("id, at, scope, text, his_words, source, active, retired_at").order("at", { ascending: false });
+      if (!all) q = q.eq("active", true);
+      const r = await q;
+      return new Response(JSON.stringify({ rules: r.data ?? [] }), { headers });
+    }
+
+    if (body.op === "rule_add") {
+      const text = String(body.text ?? "").trim().slice(0, 4000);
+      if (!text) return new Response(JSON.stringify({ error: "text required" }), { status: 400, headers });
+      const scope = (Array.isArray(body.scope) ? body.scope : String(body.scope ?? "always").split(","))
+        .map((s: any) => String(s).trim()).filter(Boolean).slice(0, 8);
+      const row = {
+        id: body.id ?? crypto.randomUUID(),
+        at: body.at ?? new Date().toISOString(),
+        scope: scope.length ? scope : ["always"],
+        text,
+        his_words: body.his_words === undefined ? true : !!body.his_words,
+        source: String(body.source ?? "typed in the app").slice(0, 300),
+        active: true,
+      };
+      const w = await sb.from("eddy_rules").upsert(row);
+      if (w.error) return new Response(JSON.stringify({ error: String(w.error.message ?? w.error).slice(0, 200) }), { status: 500, headers });
+      return new Response(JSON.stringify({ ok: true, rule: row }), { headers });
+    }
+
+    if (body.op === "rule_retire") {
+      const id = String(body.id ?? "");
+      if (!id) return new Response(JSON.stringify({ error: "id required" }), { status: 400, headers });
+      // Retiring is a flag, never a delete. His own history stays his.
+      const w = await sb.from("eddy_rules").update({ active: false, retired_at: new Date().toISOString() }).eq("id", id);
+      if (w.error) return new Response(JSON.stringify({ error: String(w.error.message ?? w.error).slice(0, 200) }), { status: 500, headers });
+      return new Response(JSON.stringify({ ok: true }), { headers });
+    }
+
+    if (body.op === "summary_get") {
+      const id = String(body.episode_id ?? "");
+      if (!id) return new Response(JSON.stringify({ error: "episode_id required" }), { status: 400, headers });
+      const r = await sb.from("eddy_episode_summaries").select("*").eq("episode_id", id).maybeSingle();
+      return new Response(JSON.stringify({ summary: r.data ?? null }), { headers });
     }
 
     if (body.op === "push_subscribe") {

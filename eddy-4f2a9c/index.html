@@ -26,9 +26,11 @@
       <h1 class="land-title">Caught in it?</h1>
       <button id="btn-in" class="big-btn">I'm in it</button>
       <button id="btn-continue" class="quiet-btn hidden" style="margin-top:10px; color:var(--water); text-align:left; white-space:normal; line-height:1.35;"></button>
+      <button id="btn-close-land" class="close-btn hidden"></button>
       <div id="parks-banner" class="parks-banner hidden"></div>
       <nav class="land-nav">
         <button data-nav="record" class="quiet-btn">The record</button>
+        <button data-nav="hold" class="quiet-btn">What I hold</button>
         <button data-nav="ride" class="quiet-btn">Ride an urge</button>
         <button data-nav="watch" class="quiet-btn">Watch</button>
         <button data-nav="settings" class="quiet-btn">Settings</button>
@@ -41,7 +43,7 @@
     <header class="bar">
       <button class="back" data-back>&#8249;</button>
       <span id="ep-clock" class="bar-label"></span>
-      <button id="btn-done" class="bar-action">Done</button>
+      <button id="btn-close-ep" class="bar-action">Close it</button>
     </header>
     <div id="ep-stream" class="stream"></div>
     <div class="guide-moves">
@@ -123,6 +125,18 @@
   <section id="v-record" class="view hidden">
     <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">The record</span><span></span></header>
     <div class="pad" id="record-body"><p class="lead">Reading the water...</p></div>
+  </section>
+
+  <!-- Closing: the loop becomes memory -->
+  <section id="v-closed" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">Closed</span><span></span></header>
+    <div class="pad" id="closed-body"></div>
+  </section>
+
+  <!-- What I hold -->
+  <section id="v-hold" class="view hidden">
+    <header class="bar"><button class="back" data-back>&#8249;</button><span class="bar-label">What I hold</span><span></span></header>
+    <div class="pad" id="hold-body"><p class="lead">Reading...</p></div>
   </section>
 
   <!-- Settings -->
