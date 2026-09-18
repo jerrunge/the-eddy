@@ -1200,7 +1200,7 @@ async function compose(sb: any, body: any, viaService: boolean, today: string, n
       }
 
       const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total, held: held.total };
-      return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v13", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, matrix, matrix_ready: matrixReady === true, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now };
+      return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v14", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, matrix, matrix_ready: matrixReady === true, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now };
 }
 
 Deno.serve(async (req: Request) => {
