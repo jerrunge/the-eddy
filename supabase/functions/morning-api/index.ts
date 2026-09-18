@@ -463,6 +463,24 @@ function pieceTitle(row: any): string {
   if (t) return String(t);
   return String(row.title || "").replace(/\s*\((x|bluesky|instagram|threads|linkedin|youtube|tiktok|reddit|facebook|substack|email|other)\)\s*$/i, "");
 }
+// THE STORY SHARE (his report 2026-09-18: the Way of Dad plan's daily sitting ends "share it to your Story" and 29:11
+// never said so). A Story share is an Instagram row with format "story" (the platform check allows no new platform):
+// it rides in the day's card as its own chip and its own Posted tap, carries no copy (nothing to paste), and never leads
+// the card, so the photo, the alt and the send kit stay the post's own.
+function isStory(row: any): boolean { return row?.platform === "instagram" && String(row?.format || "").toLowerCase() === "story" && !!row?.metadata?.story_of; }
+function platLabel(row: any): string { return isStory(row) ? "Instagram Story" : (PLATFORM_LABEL[row?.platform] || row?.platform); }
+const STORY_HOW = "Then share the Instagram post to your Story: under the post, the paper plane, then Add post to your story.";
+// A tap that names no post (the wrist, Siri, "Posted on all") touches only rows still open, and never the Story while a
+// post in the group is still open: the Story then stands as its own card, "share it to your Story", with its own tap.
+// Putting a card back (reopen, undo, unhold) touches the card's own kind: the Story card puts back the Story, a post
+// card puts back its posts, so undoing a Story never takes down posts that are already out.
+function cardTargets(group: any[], body: any, action: string, cardRow: any): any[] {
+  if (body.post_id) return group.filter((r: any) => r.id === String(body.post_id));
+  if (Array.isArray(body.post_ids)) { const w = body.post_ids.map(String); return group.filter((r: any) => w.includes(r.id)); }
+  if (action === "reopen" || action === "undo" || action === "unhold") return group.filter((r: any) => isStory(r) === isStory(cardRow));
+  const open = group.filter((r: any) => r.status !== "published");
+  return open.some((r: any) => !isStory(r)) ? open.filter((r: any) => !isStory(r)) : open;
+}
 function groupKey(row: any) { return (row.scheduled_for || "").slice(0, 10) + "|" + pieceTitle(row).toLowerCase(); }
 function tapLabel(platform: string, format: string) {
   if (SOCIAL.has(platform)) return "Posted";
@@ -540,7 +558,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
   const cards: Card[] = [];
   let fetches = 0;
   for (const [, posts] of groups) {
-    const lead = posts[0];
+    const lead = posts.find((p: any) => !isStory(p)) || posts[0];
     const m = lead.metadata || {};
     const door = doorOf(lead);
     const day = (lead.scheduled_for || "").slice(0, 10);
@@ -553,6 +571,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
     const seen = new Map<string, any>();
     const recent = day >= addDays(today, -BEHIND_DAYS);
     for (const p of posts) {
+      if (isStory(p)) continue;
       let text: string | null = null;
       if (hub) text = (p.platform === "instagram" ? hub.ig : hub.x) || null;
       if (!text && withText && recent && fetches < 14) {
@@ -568,11 +587,14 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
     }
     const photoPath = m.image || m.frame || (hub ? hub.photo : null) || null;
     const photo = photoPath ? { path: String(photoPath), alt: (hub ? hub.alt : null) || m.alt || null, url: photoUrl(String(photoPath)) } : null;
-    const kit = (m.send_to || m.account || m.slot || m.send_note) ? { to: m.send_to || null, from: m.account || null, when: m.slot || null, how: m.send_note || null } : null;
+    const hasStory = posts.some(isStory), hasPost = posts.some((p: any) => !isStory(p));
+    const how = hasStory && hasPost ? [m.send_note, STORY_HOW].filter(Boolean).join(" ") : (m.send_note || null);
+    const kit = (m.send_to || m.account || m.slot || how) ? { to: m.send_to || null, from: m.account || null, when: m.slot || null, how } : null;
     const taps: any[] = [];
     const allLabel = tapLabel(lead.platform, lead.format);
-    if (posts.length > 1) taps.push({ action: allLabel.toLowerCase(), label: allLabel + " on all " + posts.length });
-    for (const p of posts) taps.push({ action: tapLabel(p.platform, p.format).toLowerCase(), label: tapLabel(p.platform, p.format) + (posts.length > 1 ? " on " + (PLATFORM_LABEL[p.platform] || p.platform) : ""), post_id: p.id });
+    const tapRows = hasPost ? posts.filter((p: any) => !isStory(p)) : posts;
+    if (tapRows.length > 1) taps.push({ action: allLabel.toLowerCase(), label: allLabel + " on all " + tapRows.length });
+    for (const p of tapRows) taps.push({ action: tapLabel(p.platform, p.format).toLowerCase(), label: isStory(p) ? "Shared to the Story" : tapLabel(p.platform, p.format) + (tapRows.length > 1 ? " on " + platLabel(p) : ""), post_id: p.id });
     taps.push({ action: "hold", label: "Hold" }, { action: "skip", label: "Skip" });
     const links: any[] = [];
     if (m.plan_page) links.push({ label: "The plan page", href: "https://github.com/" + REPO + "/blob/main/" + m.plan_page });
@@ -588,7 +610,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
       due_min: due,
       until_min: untilOf(due),
       door,
-      what: pieceTitle(lead),
+      what: isStory(lead) ? pieceTitle(lead) + ": share it to your Story" : pieceTitle(lead),
       why: m.why || null,
       copy,
       photo,
@@ -596,7 +618,7 @@ async function contentCards(sb: any, today: string, hubCards: Map<number, any>, 
       taps,
       status: heldUntil ? "held" : skippedToday ? "skipped" : "open",
       held_until: heldUntil,
-      posts: posts.map((p: any) => ({ id: p.id, platform: p.platform, status: p.status, url: p.url || null, stage: p.metadata?.stage || null })),
+      posts: posts.map((p: any) => ({ id: p.id, platform: isStory(p) ? "instagram story" : p.platform, status: p.status, url: p.url || null, stage: p.metadata?.stage || null })),
       links,
       campaign: lead.campaign || null,
       overdue_since: day < today ? day : null,
@@ -1264,6 +1286,7 @@ Deno.serve(async (req: Request) => {
         const account = m.account ? String(m.account) : null;
         const res: any = { post_id: r.id, platform, account, ok: false };
         if (r.status === "published") { res.error = "already published; reopen first"; results.push(res); continue; }
+        if (isStory(r)) { res.error = "a Story share is by hand in the Instagram app; tap Shared to the Story"; results.push(res); continue; }
         const poster = POSTERS[platform];
         if (!poster) { res.error = "no door for " + (PLATFORM_LABEL[platform] || platform) + " yet" + (POST_HINT[platform] ? "; his hand: " + POST_HINT[platform] : ""); results.push(res); continue; }
         if (!account) { res.error = "no account on the row (metadata.account); nothing posts"; results.push(res); continue; }
@@ -1293,7 +1316,7 @@ Deno.serve(async (req: Request) => {
       }
       // the hub's day ledger rides along as it does on the Posted tap
       if (!dry && lm.day != null && doorOf(lead) === "wayofdad" && results.some((x) => x.ok)) {
-        const allOut = ((await sb.from("content_calendar").select("status, metadata").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).eq("campaign", lead.campaign)).data ?? []).filter((x: any) => String(x.metadata?.day) === String(lm.day));
+        const allOut = ((await sb.from("content_calendar").select("status, metadata, platform, format").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).eq("campaign", lead.campaign)).data ?? []).filter((x: any) => String(x.metadata?.day) === String(lm.day) && !isStory(x));
         if (allOut.length && allOut.every((x: any) => x.status === "published")) await sb.from("hub_days").upsert({ hub: "wayofdad", day: Number(lm.day), done: true, done_at: now, source: "the door (" + source + ")", updated_at: now }, { onConflict: "hub,day" });
       }
       const fresh = await contentCards(sb, today, hubCards, true, group.map((r: any) => r.id));
@@ -1306,8 +1329,9 @@ Deno.serve(async (req: Request) => {
       const rows = (await sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, url, campaign, pillar, metadata, excerpt").eq("id", id.slice(8))).data ?? [];
       if (!rows.length) return j({ error: "no such card" }, headers, 404);
       const lead = rows[0];
+      if (isStory(lead)) return j({ ok: true, copy: [], text_ready: !!(await ghToken()) }, headers);
       const sibs = (await sb.from("content_calendar").select("id, title, platform, format, status, scheduled_for, url, campaign, pillar, metadata, excerpt").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).not("status", "in", "(archived)")).data ?? [];
-      const posts = sibs.filter((r: any) => groupKey(r) === groupKey(lead));
+      const posts = sibs.filter((r: any) => groupKey(r) === groupKey(lead) && !isStory(r));
       const copy: any[] = []; const seen = new Map<string, any>();
       for (const p of posts) {
         let text: string | null = null;
@@ -1333,8 +1357,7 @@ Deno.serve(async (req: Request) => {
         if (!lead) return j({ error: "no such card" }, headers, 404);
         const sibs = (await sb.from("content_calendar").select("*").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).not("status", "in", "(archived)")).data ?? [];
         const group = sibs.filter((r: any) => groupKey(r) === groupKey(lead));
-        const wanted = body.post_id ? [String(body.post_id)] : (Array.isArray(body.post_ids) ? body.post_ids.map(String) : group.map((r: any) => r.id));
-        const targets = group.filter((r: any) => wanted.includes(r.id));
+        const targets = cardTargets(group, body, action, lead);
         for (const r of targets) {
           const meta = Object.assign({}, r.metadata || {});
           meta.chart_house = { at: now, action: "morning: " + action + " (" + source + ")" };
@@ -1347,9 +1370,9 @@ Deno.serve(async (req: Request) => {
             meta.morning = Object.assign({}, meta.morning || {}, { held_at: now, held_until: addDays(today, 1) });
           } else if (action === "skip") {
             meta.morning = Object.assign({}, meta.morning || {}, { skipped: today, skipped_at: now });
-          } else if (action === "unhold" || action === "reopen") {
+          } else if (action === "unhold" || action === "reopen" || action === "undo") {
             meta.morning = Object.assign({}, meta.morning || {}, { held_until: null, skipped: null });
-            if (r.status === "published" && action === "reopen") { patch.status = "draft"; patch.published_at = null; }
+            if (r.status === "published" && (action === "reopen" || action === "undo")) { patch.status = "draft"; patch.published_at = null; }
           } else return j({ error: "unknown action for content" }, headers, 400);
           const u = await sb.from("content_calendar").update(patch).eq("id", r.id);
           if (u.error) return j({ error: u.error.message }, headers, 500);
@@ -1366,7 +1389,7 @@ Deno.serve(async (req: Request) => {
         const hubCards = new Map<number, any>(); for (const c of (hub?.content?.cards || [])) hubCards.set(Number(c.day), c);
         // the hub's day ledger rides along so Everything Dad and the Morning agree
         if ((action === "posted" || action === "done") && lead.metadata?.day != null && doorOf(lead) === "wayofdad") {
-          const allOut = ((await sb.from("content_calendar").select("status, metadata").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).eq("campaign", lead.campaign)).data ?? []).filter((x: any) => String(x.metadata?.day) === String(lead.metadata.day));
+          const allOut = ((await sb.from("content_calendar").select("status, metadata, platform, format").eq("user_id", USER).eq("scheduled_for", lead.scheduled_for).eq("campaign", lead.campaign)).data ?? []).filter((x: any) => String(x.metadata?.day) === String(lead.metadata.day) && !isStory(x));
           if (allOut.length && allOut.every((x: any) => x.status === "published")) await sb.from("hub_days").upsert({ hub: "wayofdad", day: Number(lead.metadata.day), done: true, done_at: now, source: "the Morning (" + source + ")", updated_at: now }, { onConflict: "hub,day" });
         }
         const fresh = await contentCards(sb, today, hubCards, true, group.map((r: any) => r.id));
