@@ -1,4 +1,4 @@
-// eddy-guide v1: the guide. Claude on his own backend, grounded in the open
+// eddy-guide v2: the guide. Claude on his own backend, grounded in the open
 // episode, his history, his ritual map, his beliefs, and his live body state.
 // Same auth pattern as eddy-api (device token hash; service role inside).
 //
@@ -7,6 +7,9 @@
 // 'a1' arms verbatim-repeat with the honest counter and the New Ground release.
 // Nothing arms without Jeremy's explicit word. No other rule, cap, or gate exists
 // in this function by design.
+// v2 (2026-09-07): continuity. The guide's own earlier replies in THIS episode ride
+// in the context, in time order with his words, so a reopened episode picks up the
+// directions it was giving instead of starting cold.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import Anthropic from "npm:@anthropic-ai/sdk@0.40.1";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -29,6 +32,9 @@ async function sha256hex(s: string): Promise<string> {
 }
 function ptToday(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}
+function ptTime(iso: string): string {
+  try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }); } catch { return String(iso).slice(11, 16); }
 }
 
 const MOVE_GRAMMAR: Record<string, string> = {
@@ -59,9 +65,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     const today = ptToday();
-    const [cfg, entries, recentEps, rituals, marks, beliefs, health, cap, meds, parksAll, lastAsks] = await Promise.all([
+    const [cfg, entries, epReplies, recentEps, rituals, marks, beliefs, health, cap, meds, parksAll, lastAsks] = await Promise.all([
       sb.from("eddy_config").select("key, value"),
       episodeId ? sb.from("eddy_entries").select("at, text, source").eq("episode_id", episodeId).order("at") : Promise.resolve({ data: [] }),
+      episodeId ? sb.from("eddy_replies").select("at, mode, ask, reply").eq("episode_id", episodeId).order("at") : Promise.resolve({ data: [] }),
       sb.from("eddy_episodes").select("opened_at, minutes, ended_by, capacity").order("opened_at", { ascending: false }).limit(8),
       sb.from("eddy_rituals").select("id, name"),
       sb.from("eddy_ritual_marks").select("ritual_id, rode, at").order("at", { ascending: false }).limit(30),
@@ -84,6 +91,12 @@ Deno.serve(async (req: Request) => {
     const quiet = (parksAll.data ?? []).filter((p: any) => p.arrived === "quiet").length;
     const sleepMin = health.data?.[0]?.sleep_total_min ?? null;
 
+    // this episode as one timeline: his words and the guide's replies, in order
+    const timeline = [
+      ...((entries.data ?? []) as any[]).map((e) => ({ at: e.at, line: `[${ptTime(e.at)}] HIM: ${e.text}` })),
+      ...((epReplies.data ?? []) as any[]).map((r) => ({ at: r.at, line: `[${ptTime(r.at)}] YOU, THE GUIDE (${r.mode}): ${r.reply}` })),
+    ].sort((a, b) => String(a.at).localeCompare(String(b.at))).map((x) => x.line);
+
     const ctx = [
       `Time now (Pacific): ${new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles" })}`,
       sleepMin != null ? `Last night's sleep: ${(sleepMin / 60).toFixed(1)} hours. HRV: ${health.data?.[0]?.hrv_sdnn_ms ?? "unknown"}.` : `Sleep data not in yet.`,
@@ -94,14 +107,15 @@ Deno.serve(async (req: Request) => {
       `His named mental rituals: ${[...ritualNames.values()].join(", ")}.`,
       (beliefs.data ?? []).length ? `Recent belief ratings: ${(beliefs.data as any[]).slice(0, 4).map((b) => `"${b.belief}" (${b.polarity}) ${b.rating}/100`).join("; ")}.` : ``,
       `Recent episodes: ${(recentEps.data ?? []).map((e: any) => `${String(e.opened_at).slice(0, 16)} (${e.minutes ?? "?"}min, ${e.ended_by ?? "open"})`).join("; ") || "this is early days"}.`,
-      `THIS EPISODE, his words in order:`,
-      ...(entries.data ?? []).map((e: any) => `[${String(e.at).slice(11, 16)}] ${e.text}`),
+      timeline.length ? `THIS EPISODE SO FAR, in order (his words and what you already told him; if he reopened the app mid-episode, continue from your last direction rather than starting over):` : `THIS EPISODE: nothing said yet.`,
+      ...timeline,
     ].filter(Boolean).join("\n");
 
     const system = [
       `You are the guide inside The Eddy, Jeremy's own app for the minute an OCD rumination loop plus ADHD has him. You are talking to Jeremy, an adult expert in his own life. You run on his infrastructure and everything you say is stored in his record, visible only to him.`,
       `Voice: warm, direct, plain words, short. Two to four sentences unless he asks for more. Never use an em dash. Never scold, never assess him, never say "you should have", never mention streaks or scores. Never narrate that you are using a therapy; just do it.`,
       `The loop is the PROCESS, not the content (MCT). Concrete beats abstract (RF-CBT). Evidence versus inference (I-CBT). Riding an urge beats feeding it (ERP). These are your instincts, not your vocabulary.`,
+      `Continuity: the episode timeline in the context is the conversation you are already in. Keep your own earlier directions in mind; if he says he did the thing, take the next step; if he lost the thread, restate the last direction in one line and go on.`,
       `Never invent rules for him, never gate him, never refuse to engage. If he is in real danger he knows his own resources; that surface is not your job (his explicit ruling).`,
       MOVE_GRAMMAR[mode],
       lawArmed

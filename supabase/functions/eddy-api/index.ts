@@ -1,9 +1,13 @@
-// eddy-api v1: the Eddy's single data door.
+// eddy-api v3: the Eddy's single data door.
 // Auth: device token checked against an embedded SHA-256 hash (the room-cabinet
 // pattern). Tables are RLS-enabled with zero policies, so only this function's
 // service role reaches them. verify_jwt=false is deliberate and load-bearing.
 // Every write is an idempotent upsert on a client-generated UUID, which is what
 // lets the offline queue replay safely; capture is never blocked by this door.
+// v2 (2026-09-07): op "episode" returns one episode's entries and guide replies in
+// order, so a reopened Eddy redraws the conversation it was in (continuity).
+// v3 (2026-09-07): context carries the last episode so the landing can offer to
+// continue it; sync accepts episode_reopen so a closed loop can be picked back up.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -49,14 +53,20 @@ Deno.serve(async (req: Request) => {
   try {
     if (body.op === "context") {
       const today = ptToday();
-      const [health, cap, meds, parksDue, parksAll, rituals] = await Promise.all([
+      const [health, cap, meds, parksDue, parksAll, rituals, lastEp] = await Promise.all([
         sb.from("health_snapshots").select("date, sleep_total_min, hrv_sdnn_ms").order("date", { ascending: false }).limit(1),
         sb.from("capacity_state").select("state, declared_at").eq("date", today).order("declared_at", { ascending: false }).limit(1),
         sb.from("med_log").select("med_name, taken_at").eq("date", today),
         sb.from("eddy_parks").select("id, until, note, episode_id").is("arrived", null).lte("until", new Date().toISOString()).order("until"),
         sb.from("eddy_parks").select("id, arrived"),
         sb.from("eddy_rituals").select("id, name").order("created_at"),
+        sb.from("eddy_episodes").select("id, opened_at, closed_at, ended_by").order("opened_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
+      let last_episode: any = null;
+      if (lastEp.data) {
+        const first = await sb.from("eddy_entries").select("text").eq("episode_id", lastEp.data.id).order("at").limit(1).maybeSingle();
+        last_episode = { ...lastEp.data, first: first.data?.text ?? "" };
+      }
       const kept = (parksAll.data ?? []).length;
       const quiet = (parksAll.data ?? []).filter((p: any) => p.arrived === "quiet").length;
       return new Response(JSON.stringify({
@@ -68,7 +78,19 @@ Deno.serve(async (req: Request) => {
         parks_kept: kept,
         parks_quiet: quiet,
         rituals: rituals.data ?? [],
+        last_episode,
       }), { headers });
+    }
+
+    if (body.op === "episode") {
+      const id = String(body.episode_id ?? "");
+      if (!id) return new Response(JSON.stringify({ error: "episode_id required" }), { status: 400, headers });
+      const [entries, replies, ep] = await Promise.all([
+        sb.from("eddy_entries").select("at, text, source").eq("episode_id", id).order("at"),
+        sb.from("eddy_replies").select("at, mode, ask, reply").eq("episode_id", id).order("at"),
+        sb.from("eddy_episodes").select("id, opened_at, closed_at").eq("id", id).maybeSingle(),
+      ]);
+      return new Response(JSON.stringify({ episode: ep.data ?? null, entries: entries.data ?? [], replies: replies.data ?? [] }), { headers });
     }
 
     if (body.op === "sync") {
@@ -77,6 +99,8 @@ Deno.serve(async (req: Request) => {
         try {
           if (o.kind === "episode_open") {
             await sb.from("eddy_episodes").upsert({ id: o.id, user_id: USER_ID, opened_at: o.opened_at, capacity: o.capacity ?? null, sleep_h: o.sleep_h ?? null, entry_mode: o.entry_mode ?? "typed" });
+          } else if (o.kind === "episode_reopen") {
+            await sb.from("eddy_episodes").update({ closed_at: null, ended_by: null }).eq("id", o.id);
           } else if (o.kind === "episode_close") {
             await sb.from("eddy_episodes").update({ closed_at: o.closed_at, ended_by: o.ended_by, minutes: o.minutes ?? null, entry_mode: o.entry_mode ?? undefined }).eq("id", o.id);
           } else if (o.kind === "entry_add") {

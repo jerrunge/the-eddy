@@ -3,3 +3,5 @@
 .vapid.json
 node_modules
 .papers-mirror.log
+.DS_Store
+supabase/.temp/
