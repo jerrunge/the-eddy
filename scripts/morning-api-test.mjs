@@ -552,6 +552,17 @@ const ids = (g) => g.steps.map((s) => s.row_id);
   eq("G morning: the card's photo.url stays images only", content.map((c) => c.photo && c.photo.url && /\.pdf/.test(decodeURIComponent(c.photo.url))).some(Boolean), false);
   eq("G morning writes nothing", db.writes, []);
 }
+{
+  // the file door (GET ?op=photo): a vault PDF passes the path rule (then wants the GitHub token, absent here), a video and a
+  // path outside docs/ do not; the token rides in the header, never the URL
+  const { handler } = await fresh();
+  globalThis.__sb = mockDb(tablesFor());
+  const get = async (path) => { const res = await handler(new Request("http://local/functions/v1/morning-api?op=photo&path=" + encodeURIComponent(path), { method: "GET", headers: { authorization: "Bearer " + SERVICE } })); return [res.status, JSON.parse(await res.text()).error]; };
+  eq("G file door: a vault PDF passes the path rule", await get(FK + "/assets/cards/01-the-body-linkedin.pdf"), [503, "MORNING_GH_TOKEN not set"]);
+  eq("G file door: a vault image passes as before", await get(FK + "/assets/map/00-the-map.png"), [503, "MORNING_GH_TOKEN not set"]);
+  eq("G file door: a video is refused", await get(FK + "/assets/reels/01-the-body-reel.mp4"), [400, "not a vault image or PDF"]);
+  eq("G file door: a path outside docs/ is refused", await get("supabase/functions/morning-api/index.ts"), [400, "not a vault image or PDF"]);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
