@@ -228,7 +228,7 @@ const find = (d, id) => d.sitting.concat(d.behind.flatMap((g) => g.cards), d.lat
 {
   const { r, db, d, calls } = await morning();
   eq("morning: 200", r.status, 200);
-  eq("A3 engine and place_rule", [d.engine, d.place_rule], ["one-today v12", "actions-only"]);
+  eq("A3 engine and place_rule", [d.engine, d.place_rule], ["one-today v15", "actions-only"]);
   eq("A1 pagination: two Linear pages, the second after cursor-1", calls.map((v) => v.after ?? null), [null, "cursor-1"]);
   eq("C2 links_ready true with the column", d.links_ready, true);
   eq("morning writes nothing", db.writes, []);
@@ -246,8 +246,8 @@ const find = (d, id) => d.sitting.concat(d.behind.flatMap((g) => g.cards), d.lat
   eq("C2 the move carries its twin", find(d, "move:" + FAB).twin, { item_id: TWIN, text: "Set up the staging area", open: true });
   eq("C2 a move with no link: twin null", find(d, "move:mv-plain").twin, null);
   eq("A3 undated.linear_urgent", d.undated.linear_urgent, [
-    { id: "lin-17", key: "JER-17", title: "Urgent with no day", url: null, due: null, priority: 1, state: "Todo", reason: "undated_urgent", open_children: 0 },
-    { id: "lin-5", key: "JER-5", title: "Another urgent, no day", url: null, due: null, priority: 1, state: "Backlog", reason: "undated_urgent", open_children: 0 }]);
+    { id: "lin-17", key: "JER-17", title: "Urgent with no day", url: null, due: null, priority: 1, state: "Todo", reason: "undated_urgent", open_children: 0, pillar: "life", track: "building", placed_by: "none" },
+    { id: "lin-5", key: "JER-5", title: "Another urgent, no day", url: null, due: null, priority: 1, state: "Backlog", reason: "undated_urgent", open_children: 0, pillar: "life", track: "building", placed_by: "none" }]);
   eq("A3 undated.linear_list reasons (Duplicate out)", d.undated.linear_list.map((x) => x.key + ":" + x.reason), ["JER-17:undated_urgent", "JER-5:undated_urgent", "JER-23:goal", "JER-36:parked", "JER-361:parent", "JER-9:undated"]);
   eq("A3 JER-361 lists its 8 open children", d.undated.linear_list.find((x) => x.key === "JER-361").open_children, 8);
   eq("A3 undated.linear counts every undated off row, Urgent in, Duplicate out", d.undated.linear, 6);
@@ -258,7 +258,7 @@ const find = (d, id) => d.sitting.concat(d.behind.flatMap((g) => g.cards), d.lat
     ["mid", "parent", "2026-09-15", 1, null, null],
     [TWIN, "twin", "2026-09-12", 0, FAB, "2026-09-12"],
     ["ptwin", "parent", "2026-09-11", 1, "mv-kitchen", "2026-09-16"]]);
-  eq("B1 held item row shape", d.held.items[0], { id: P389, card_id: "item:" + P389, title: "The keep-with-me list", box: "The house: move out", door: "house", due: "2026-09-07", reason: "parent", open_children: 6, move_id: null, move_day: null });
+  eq("B1 held item row shape (v13 adds pillar, track, placed_by)", d.held.items[0], { id: P389, card_id: "item:" + P389, title: "The keep-with-me list", box: "The house: move out", door: "house", due: "2026-09-07", reason: "parent", open_children: 6, move_id: null, move_day: null, pillar: "life", track: "house", placed_by: "rule" });
   eq("B4 389abbe8 and its children are not cards", [find(d, "item:" + P389), find(d, "item:k389-0")], [undefined, undefined]);
   eq("B5 067434dd (undated, 2 children): not held", d.held.items.some((x) => x.id === P067), false);
   eq("B3 undated.items counts children: 6 + 3 + gp + utilities + ptwin-kid", d.undated.items, 12);
@@ -301,7 +301,8 @@ async function tap(body, setup = (t) => t, dbOpts = {}) {
   const tables = setup(tablesFor());
   const db = mockDb(tables, dbOpts);
   globalThis.__sb = db; linearCalls = [];
-  const r = await call(handler, Object.assign({ op: "tap" }, body));
+  // the fixture is dated D, so the tap is too: without it today's real date leaks into "reopens on today" and "days past"
+  const r = await call(handler, Object.assign({ op: "tap", date: D }, body));
   return { r, db, tables, calls: linearCalls.slice() };
 }
 const deskWrites = (db) => db.writes.filter((w) => w.table === "desk_items");
@@ -397,6 +398,159 @@ for (const action of ["hold", "skip"]) {
 {
   const { r } = await tap({ card_id: "item:orphan", action: "hold" });
   eq("B2 a tapped child of a done parent: plain why", [r.status, r.json.card.parent, r.json.card.status], [200, null, "held"]);
+}
+
+// ================= G. v15, the groups op (RULINGS 2026-10-06, yes as drawn): today's posts as groups in his account order =================
+// The fixture is Tue 10-06's real shape as the hub carried it at 3:50pm PT: 24 rows across the three pillars (four Way of Dad
+// with three published, twelve Fortify, eight Maddy with three texts under one piece title), plus one open row from the day
+// before. step_order and photos_album as homebase wrote them (the Reddit row stripped of both, the brief's row with no clock).
+const D2 = "2026-10-06";
+const USER_ID = "5c048e07-15b3-4a44-98e7-33cde24017ac";
+const FK = "docs/marketing/staged/fortify-post-and-go-2026-10", MK = "docs/marketing/staged/maddy-post-and-go-2026-10", WK = "docs/marketing/staged/wayofdad-open-2026-09";
+const PUB_AT = "2026-10-06T15:43:52.872+00:00";
+const PUB = { status: "published", published_at: PUB_AT };
+const API = "http://mock.local/functions/v1/morning-api";
+const fileDoor = (p) => API + "?op=photo&path=" + encodeURIComponent(p);
+const R = (id, pillar, campaign, title, platform, meta, extra = {}) => Object.assign({ id, user_id: USER_ID, title, platform, format: "post", status: "draft", scheduled_for: D2, published_at: null, url: null, campaign, pillar, track: "posting", parent_post_id: null, is_canonical: true, excerpt: "Paste text for " + title + ".", updated_at: D2 + "T00:00:00Z", metadata: meta }, extra);
+const ACCT = { linkedin: "LinkedIn: his own profile, Jeremy Runge (linkedin.com/in/jeremyrunge)", instagram: "Instagram: his own account (never @mymaddyapp, never @way.of.dad)", youtube: "YouTube: @jeremyarunge" };
+const slotOf = (t, carried) => "Tue 10-06, " + t + " PT" + (carried ? " (carried from Mon 10-05)" : "");
+const F = (id, title, platform, so, time, piece, album, image, txt, carried = false) => R(id, "fortify", "fortify-post-and-go-2026-10", title, platform, { account: ACCT[platform], slot: slotOf(time, carried), step_order: so, photos_album: album, image, vault_path: FK + "/" + txt, alt: "1: Card 1 of N. Dark card.", send_note: "How to post " + title + ".", piece_title: piece, why: "Why " + title + "." });
+const pngs = (stem, n, dir = "assets/cards") => Array.from({ length: n }, (_, i) => `${dir}/${stem}-0${i + 1}.png`).join(", ");
+const MACC = { instagram: "@mymaddyapp (Instagram)", facebook: "@mymaddyapp Facebook Page", tiktok: "@mymaddyapp (TikTok)", threads: "@mymaddyapp (Threads)" };
+const CAR = Array.from({ length: 8 }, (_, i) => `assets/carousel/whats-new-0${i + 1}-x.png`);
+const Mc = (id, platform, so, time) => R(id, "maddy", "maddy-post-and-go-2026-10", "Maddy 1.1 carousel, " + platform, platform, { account: MACC[platform], slot: slotOf(time, true), step_order: so, photos_album: "Cards/Maddy/1.1 carousel", image: platform === "threads" ? CAR : CAR.join(", "), vault_path: MK + "/01-whats-new-carousel-" + platform + ".txt", alt: "1. Three iPhone screens.", send_note: "Carousel, the eight in order.", piece_title: "What's new in Maddy 1.1: the carousel" });
+const Mt = (id, who, so) => R(id, "maddy", "maddy-post-and-go-2026-10", "Text to " + who, "other", { account: "his phone (or the channel he already uses with them)", slot: slotOf("9:30am"), step_order: so, vault_path: MK + "/05-texts-ro-michele-emma-" + who.toLowerCase() + ".txt", send_note: "Paste into your thread with " + who + " and send.", piece_title: "Three texts to the people whose asks shipped" });
+function postingRows() {
+  return [
+    R("w-x", "wayofdad", "wayofdad-open-2026-09", "Half Dome and the boots (x)", "x", { account: "X @wayofdad", slot: "Tue 2026-10-06, 7:30am Pacific, same sitting as the Instagram reel", step_order: 1, frame: "56-halfdome-cables-arms-wide.jpg", alt: "A man on the Half Dome cables.", vault_path: WK + "/daily-2026-10-06-half-dome-boots.x.txt", piece_title: "Half Dome and the boots", send_note: "One photo from iCloud." }, PUB),
+    R("w-bsky", "wayofdad", "wayofdad-open-2026-09", "Half Dome and the boots (bluesky)", "bluesky", { account: "Bluesky @wayofdad.co", slot: "Tue 2026-10-06, 7:30am Pacific, same sitting as the Instagram reel", step_order: 2, frame: "56-halfdome-cables-arms-wide.jpg", alt: "A man on the Half Dome cables.", vault_path: WK + "/daily-2026-10-06-half-dome-boots.x.txt", piece_title: "Half Dome and the boots" }, PUB),
+    R("w-ig", "wayofdad", "wayofdad-open-2026-09", "Half Dome and the boots (instagram feed)", "instagram", { account: "Instagram @way.of.dad", slot: "Tue 2026-10-06, 9:00am Pacific, the same sitting as X and Bluesky", step_order: 4, frame: "56-halfdome-cables-arms-wide.jpg", alt: "A man on the Half Dome cables.", vault_path: WK + "/daily-2026-10-06-half-dome-boots.ig.txt", piece_title: "Half Dome and the boots" }, PUB),
+    R("w-reel", "wayofdad", "wayofdad-open-2026-09", "Reel: Nothing about you is broken (instagram)", "instagram", { account: "Instagram @way.of.dad", slot: "Tue 2026-10-06, 7:30am Pacific", step_order: 3, frame: "47-cypress-log-hands.jpg", alt: "A Reel of three stills.", vault_path: WK + "/reel-2.ig.txt", piece_title: "Reel: Nothing about you is broken", plan_page: "docs/strategy/wayofdad-plan.html", send_note: "Instagram, plus, Reel." }),
+    F("f-iw-li", "2 of 10, the inner weather: LinkedIn carousel", "linkedin", 1, "8:30am", "Fortify 2 of 10: the inner weather (carousel)", "Cards/Fortify/02 The inner weather", "assets/cards/02-the-inner-weather-linkedin.pdf", "02-the-inner-weather.post.txt"),
+    F("f-iw-ig", "2 of 10, the inner weather: Instagram carousel", "instagram", 2, "8:35am", "Fortify 2 of 10: the inner weather (carousel)", "Cards/Fortify/02 The inner weather", pngs("02-the-inner-weather", 5), "02-the-inner-weather.post.txt"),
+    F("f-map-li", "The map: LinkedIn", "linkedin", 3, "9:00am", "Fortify: the map (ten parts, one image)", "Cards/Fortify/00 The map", "assets/map/00-the-map.png", "00-the-map.post.txt", true),
+    F("f-map-ig", "The map: Instagram", "instagram", 4, "9:05am", "Fortify: the map (ten parts, one image)", "Cards/Fortify/00 The map", "assets/map/00-the-map.png", "00-the-map.post.txt", true),
+    F("f-body-li", "1 of 10, the body: LinkedIn carousel", "linkedin", 5, "10:00am", "Fortify 1 of 10: the body (carousel)", "Cards/Fortify/01 The body", "assets/cards/01-the-body-linkedin.pdf", "01-the-body.post.txt", true),
+    F("f-body-ig", "1 of 10, the body: Instagram carousel", "instagram", 6, "10:05am", "Fortify 1 of 10: the body (carousel)", "Cards/Fortify/01 The body", pngs("01-the-body", 6), "01-the-body.post.txt", true),
+    F("f-des-li", "Desire cards: LinkedIn carousel", "linkedin", 7, "12:00pm", "Fortify desire cards (five, built 09-17)", "Cards/Fortify/Desire cards", "assets/desire/desire-fortify-linkedin.pdf", "11-desire-cards.post.txt"),
+    F("f-des-ig", "Desire cards: Instagram carousel", "instagram", 8, "12:05pm", "Fortify desire cards (five, built 09-17)", "Cards/Fortify/Desire cards", pngs("rtf", 5, "assets/desire"), "11-desire-cards.post.txt"),
+    F("f-body-reel", "1 of 10, the body: Instagram Reel", "instagram", 9, "5:30pm", "Fortify 1 of 10: the body (silent reel)", "Reels/Fortify", "assets/reels/01-the-body-reel.mp4", "01-the-body.reel.txt", true),
+    F("f-body-yt", "1 of 10, the body: YouTube Short", "youtube", 10, "5:35pm", "Fortify 1 of 10: the body (silent reel)", "Reels/Fortify", "assets/reels/01-the-body-reel.mp4", "01-the-body.youtube.txt", true),
+    F("f-iw-reel", "2 of 10, the inner weather: Instagram Reel", "instagram", 11, "6:30pm", "Fortify 2 of 10: the inner weather (silent reel)", "Reels/Fortify", "assets/reels/02-the-inner-weather-reel.mp4", "02-the-inner-weather.reel.txt"),
+    F("f-iw-yt", "2 of 10, the inner weather: YouTube Short", "youtube", 12, "6:35pm", "Fortify 2 of 10: the inner weather (silent reel)", "Reels/Fortify", "assets/reels/02-the-inner-weather-reel.mp4", "02-the-inner-weather.youtube.txt"),
+    Mc("m-ig", "instagram", 2, "9:10am"), Mc("m-fb", "facebook", 3, "9:15am"), Mc("m-tt", "tiktok", 4, "9:20am"), Mc("m-th", "threads", 5, "9:25am"),
+    Mt("m-emma", "Emma", 6), Mt("m-michele", "Michele", 7), Mt("m-ro", "Ro", 8),
+    R("m-reddit", "maddy", "maddy-post-and-go-2026-10", "Update from Maddy's dad: 1.1 is out, and your reminders are finally yours to set", "reddit", { account: "his own Reddit account", vault_path: MK + "/03-reddit-audhd-update.txt", send_note: "Create post, Text. First line is the title.", piece_title: "Maddy 1.1 update in r/AuDHD" }),
+    // yesterday's open row: the morning op's behind, listed by the groups op and never grouped
+    R("m-bday", "maddy", "maddy-birthday-2026-08", "Send: Maddy's birthday: the personal text", "other", { account: "his phone", slot: "Mon 10-05, 9:00am PT", send_note: "Send it." }, { scheduled_for: "2026-10-05" }),
+  ];
+}
+async function groups(body = {}, tables) {
+  const { handler } = await fresh();
+  const db = mockDb(tables || Object.assign(tablesFor(), { content_calendar: postingRows() }));
+  globalThis.__sb = db;
+  const r = await call(handler, Object.assign({ op: "groups", date: D2, now_min: 600 }, body));
+  return { r, d: r.json, db };
+}
+const ids = (g) => g.steps.map((s) => s.row_id);
+{
+  const { r, d, db } = await groups();
+  eq("G 200, the engine names itself v15", [r.status, d.engine, d.order_rule], [200, "one-today v15", "account-order; step_order, then the clock, then the platform"]);
+  eq("G the op writes nothing", db.writes, []);
+  eq("G his account order: The Way of Dad, Fortify, Maddy", d.groups.map((g) => [g.order, g.key, g.name]), [[1, "wayofdad", "The Way of Dad"], [2, "fortify", "Fortify"], [3, "maddy", "Maddy"]]);
+  eq("G one step per platform row: 4, 12, 8", d.groups.map((g) => g.steps.length), [4, 12, 8]);
+  eq("G counts over the day", d.counts, { groups: 3, total: 24, done: 3, open: 21, held: 0, skipped: 0 });
+  eq("G numbers run 1 to N in every group", d.groups.map((g) => g.steps.map((s) => s.n)), [[1, 2, 3, 4], Array.from({ length: 12 }, (_, i) => i + 1), Array.from({ length: 8 }, (_, i) => i + 1)]);
+  const wod = d.groups[0];
+  eq("G a group reads 3 of 4", [wod.count, wod.all_done, wod.first_open], [{ total: 4, done: 3, open: 1, held: 0, skipped: 0 }, false, "post:w-reel"]);
+  eq("G posted rows come back done with their published_at", wod.steps.filter((s) => s.status === "done").map((s) => [s.n, s.row_id, s.done_at]), [[1, "w-x", PUB_AT], [2, "w-bsky", PUB_AT], [4, "w-ig", PUB_AT]]);
+  eq("G step_order leads, as the hub gives it (the reel 3, the feed post 4)", wod.steps.map((s) => s.n + ":" + s.row_id + ":" + s.ordered_by), ["1:w-x:step_order", "2:w-bsky:step_order", "3:w-reel:step_order", "4:w-ig:step_order"]);
+  eq("G what: a (x) suffix reads ', on X'", wod.steps.map((s) => s.what), ["Half Dome and the boots, on X", "Half Dome and the boots, on Bluesky", "Reel: Nothing about you is broken, on Instagram", "Half Dome and the boots, on the Instagram feed"]);
+  eq("G accounts, distinct, in step order", wod.accounts, ["X @wayofdad", "Bluesky @wayofdad.co", "Instagram @way.of.dad"]);
+  eq("G an iCloud frame is named, no files, no bytes", [wod.steps[0].frame, wod.steps[0].files, wod.steps[0].photo, wod.steps[0].photos_album], ["56-halfdome-cables-arms-wide.jpg", [], { path: "56-halfdome-cables-arms-wide.jpg", alt: "A man on the Half Dome cables.", url: null }, null]);
+  const tapX = { card_id: "content:w-x", post_id: "w-x", action: "posted", label: "Posted" }, undoX = { card_id: "content:w-x", post_id: "w-x", action: "undo", label: "Undo" };
+  eq("G a done step carries its tap and its undo; taps is the undo", [wod.steps[0].tap, wod.steps[0].undo, wod.steps[0].taps, wod.steps[0].card_id, wod.steps[0].post_id], [tapX, undoX, [undoX], "content:w-x", "w-x"]);
+  const tapReel = { card_id: "content:w-reel", post_id: "w-reel", action: "posted", label: "Posted" };
+  eq("G an open step: the tap, then Hold and Skip, each naming the row", wod.steps[2].taps, [tapReel, { action: "hold", label: "Hold", post_id: "w-reel" }, { action: "skip", label: "Skip", post_id: "w-reel" }]);
+  eq("G done_all is the open steps' taps, in order", wod.done_all, [{ card_id: "content:w-reel", post_id: "w-reel", action: "posted" }]);
+  eq("G the plan page link rides on the step", wod.steps[2].links, [{ label: "The file", href: "https://github.com/jerrunge/jr-os-docs/blob/main/" + WK + "/reel-2.ig.txt" }, { label: "The plan page", href: "https://github.com/jerrunge/jr-os-docs/blob/main/docs/strategy/wayofdad-plan.html" }]);
+  eq("G next_step_id is the first open step in his order; next_by_clock_id the clock rule at 10:00am", [d.next_step_id, d.next_by_clock_id], ["post:w-reel", "post:f-body-li"]);
+  const f = d.groups[1];
+  eq("G Fortify in step_order", ids(f), ["f-iw-li", "f-iw-ig", "f-map-li", "f-map-ig", "f-body-li", "f-body-ig", "f-des-li", "f-des-ig", "f-body-reel", "f-body-yt", "f-iw-reel", "f-iw-yt"]);
+  const pdf = FK + "/assets/cards/02-the-inner-weather-linkedin.pdf";
+  eq("G a kit PDF resolves against the kit folder and gets a url on the file door", f.steps[0].files, [{ path: pdf, name: "02-the-inner-weather-linkedin.pdf", kind: "pdf", url: fileDoor(pdf) }]);
+  eq("G a comma-joined image string splits into files, each with a url", f.steps[1].files.map((x) => [x.kind, x.name, x.url === fileDoor(x.path)]), [1, 2, 3, 4, 5].map((i) => ["image", "02-the-inner-weather-0" + i + ".png", true]));
+  eq("G photo is the first image, with the alt", f.steps[1].photo, { path: FK + "/assets/cards/02-the-inner-weather-01.png", alt: "1: Card 1 of N. Dark card.", url: fileDoor(FK + "/assets/cards/02-the-inner-weather-01.png") });
+  eq("G a video: kind video, no url, the album carries it, photo null", [f.steps[8].files, f.steps[8].photos_album, f.steps[8].photo], [[{ path: FK + "/assets/reels/01-the-body-reel.mp4", name: "01-the-body-reel.mp4", kind: "video", url: null }], "Reels/Fortify", null]);
+  eq("G albums, distinct, in step order", f.albums, ["Cards/Fortify/02 The inner weather", "Cards/Fortify/00 The map", "Cards/Fortify/01 The body", "Cards/Fortify/Desire cards", "Reels/Fortify"]);
+  eq("G the excerpt leads on every step: no hub, no vault read", [...new Set(d.groups.flatMap((g) => g.steps.map((s) => s.text.source)))], ["excerpt"]);
+  eq("G text body, path and label", [f.steps[0].text, f.steps[1].text.label, f.steps[9].text.label], [{ body: "Paste text for 2 of 10, the inner weather: LinkedIn carousel.", source: "excerpt", path: FK + "/02-the-inner-weather.post.txt", label: "Text" }, "Caption", "Description"]);
+  eq("G the clock, block, due and until on a step", [f.steps[0].time, f.steps[0].block, f.steps[0].due_min, f.steps[0].until_min, f.steps[6].time, f.steps[6].block], ["8:30am", "Wake", 510, 525, "12:00pm", "Midday"]);
+  eq("G account, how, why, alt, piece, piece_key, pillar, track", [f.steps[0].account, f.steps[0].how, f.steps[0].why, f.steps[0].alt, f.steps[0].piece, f.steps[0].piece_key, f.steps[0].pillar, f.steps[0].track, f.steps[0].campaign], [ACCT.linkedin, "How to post 2 of 10, the inner weather: LinkedIn carousel.", "Why 2 of 10, the inner weather: LinkedIn carousel.", "1: Card 1 of N. Dark card.", "Fortify 2 of 10: the inner weather (carousel)", D2 + "|fortify 2 of 10: the inner weather (carousel)", "fortify", "posting", "fortify-post-and-go-2026-10"]);
+  const m = d.groups[2];
+  eq("G Maddy in step_order, the unordered row last", ids(m), ["m-ig", "m-fb", "m-tt", "m-th", "m-emma", "m-michele", "m-ro", "m-reddit"]);
+  eq("G three texts under one piece title stay three steps", m.steps.filter((s) => s.piece === "Three texts to the people whose asks shipped").map((s) => s.n + ":" + s.what), ["5:Text to Emma", "6:Text to Michele", "7:Text to Ro"]);
+  eq("G a text's tap is Sent", m.steps[4].tap, { card_id: "content:m-emma", post_id: "m-emma", action: "sent", label: "Sent" });
+  eq("G a row with no clock and no step_order: time null, Any time, placed by the platform, last", [m.steps[7].row_id, m.steps[7].time, m.steps[7].due_min, m.steps[7].until_min, m.steps[7].block, m.steps[7].ordered_by, m.steps[7].step_order], ["m-reddit", null, null, null, "Any time", "platform", null]);
+  eq("G an image list is taken as a list", [m.steps[3].files.length, m.steps[3].files[7].name, m.steps[0].files.length], [8, "whats-new-08-x.png", 8]);
+  eq("G yesterday's open row: listed in behind, not grouped", [d.behind.count, d.behind.rows, d.groups.some((g) => ids(g).includes("m-bday"))], [1, [{ id: "post:m-bday", row_id: "m-bday", what: "Send: Maddy's birthday: the personal text", day: "2026-10-05", pillar: "maddy", platform: "other" }], false]);
+  eq("G the clock: a test clock for the service role", [d.now_min, d.clock, d.date, d.nice_date, d.text_ready], [600, "test", D2, "Tue Oct 6", false]);
+}
+{
+  const { r, d } = await groups({ pillar: "maddy" });
+  eq("G pillar narrows to one group", [r.status, d.groups.map((g) => g.key), d.counts.total, d.next_step_id], [200, ["maddy"], 8, "post:m-ig"]);
+  const bad = await groups({ pillar: "nope" });
+  eq("G an unknown pillar answers 400", [bad.r.status, bad.d.error], [400, "no such pillar: nope"]);
+  const none = await groups({ date: "2026-10-09" });
+  eq("G a day with no rows: no groups, counts zero, next null", [none.r.status, none.d.groups, none.d.counts, none.d.next_step_id, none.d.next_by_clock_id], [200, [], { groups: 0, total: 0, done: 0, open: 0, held: 0, skipped: 0 }, null, null]);
+}
+{
+  // no step_order anywhere: the clock, then the pillar's platform order, then the title
+  const rows = postingRows().map((x) => { const meta = Object.assign({}, x.metadata); delete meta.step_order; return Object.assign({}, x, { metadata: meta }); });
+  const { d } = await groups({}, Object.assign(tablesFor(), { content_calendar: rows }));
+  eq("G no step_order: The Way of Dad by the clock, X before Bluesky before Instagram at 7:30, the 9:00 feed last", d.groups[0].steps.map((s) => s.row_id + ":" + s.ordered_by), ["w-x:clock", "w-bsky:clock", "w-reel:clock", "w-ig:clock"]);
+  eq("G no step_order: Fortify by the clock", ids(d.groups[1]), ["f-iw-li", "f-iw-ig", "f-map-li", "f-map-ig", "f-body-li", "f-body-ig", "f-des-li", "f-des-ig", "f-body-reel", "f-body-yt", "f-iw-reel", "f-iw-yt"]);
+  eq("G no step_order: three texts at one clock on one platform fall to the title; the row with no clock last", ids(d.groups[2]), ["m-ig", "m-fb", "m-tt", "m-th", "m-emma", "m-michele", "m-ro", "m-reddit"]);
+  eq("G no step_order: step_order null on every step", d.groups.every((g) => g.steps.every((s) => s.step_order === null)), true);
+}
+{
+  // a tie on step_order breaks by the clock, then the platform
+  const rows = postingRows().map((x) => x.pillar === "maddy" ? Object.assign({}, x, { metadata: Object.assign({}, x.metadata, { step_order: 1 }) }) : x);
+  const { d } = await groups({ pillar: "maddy" }, Object.assign(tablesFor(), { content_calendar: rows }));
+  eq("G every Maddy row at step_order 1: the clock, then Instagram, Facebook, TikTok, Threads, then the texts by title", ids(d.groups[0]), ["m-ig", "m-fb", "m-tt", "m-th", "m-emma", "m-michele", "m-ro", "m-reddit"]);
+}
+{
+  // a Story share is its own step (v14's Story rows), after the posts, with no text and the Story how
+  const rows = postingRows().concat([R("w-story", "wayofdad", "wayofdad-open-2026-09", "Half Dome and the boots (instagram story)", "instagram", { account: "Instagram @way.of.dad", slot: "Tue 2026-10-06, 9:05am Pacific", story_of: "w-ig" }, { format: "story", excerpt: null })]);
+  const { d } = await groups({}, Object.assign(tablesFor(), { content_calendar: rows }));
+  const st = d.groups[0].steps.find((s) => s.row_id === "w-story");
+  eq("G a Story share: its own step, last by platform order, Shared to the Story, no text, the Story how", [d.groups[0].steps.length, st.n, st.platform, st.platform_label, st.story, st.what, st.tap, st.text.source, st.text.body, /paper plane/.test(st.how)], [5, 5, "instagram story", "Instagram Story", true, "Half Dome and the boots: share it to your Story", { card_id: "content:w-story", post_id: "w-story", action: "posted", label: "Shared to the Story" }, "none", null, true]);
+}
+{
+  // held and skipped read from metadata.morning as on the card; all_done when every step is done
+  const rows = postingRows().map((x) => {
+    if (x.id === "w-reel") return Object.assign({}, x, PUB);
+    if (x.id === "f-map-li") return Object.assign({}, x, { metadata: Object.assign({}, x.metadata, { morning: { held_until: "2026-10-07" } }) });
+    if (x.id === "f-map-ig") return Object.assign({}, x, { metadata: Object.assign({}, x.metadata, { morning: { skipped: D2 } }) });
+    return x;
+  });
+  const { d } = await groups({}, Object.assign(tablesFor(), { content_calendar: rows }));
+  const wod = d.groups[0], f = d.groups[1];
+  eq("G every step done: all_done, first_open null, done_all empty, count 4 of 4", [wod.all_done, wod.first_open, wod.done_all, wod.count], [true, null, [], { total: 4, done: 4, open: 0, held: 0, skipped: 0 }]);
+  eq("G held and skipped: neither open nor done, counted", [f.steps[2].status, f.steps[2].held_until, f.steps[3].status, f.count], ["held", "2026-10-07", "skipped", { total: 12, done: 0, open: 10, held: 1, skipped: 1 }]);
+  eq("G next_step_id skips the finished group and the held and skipped steps", [d.next_step_id, f.first_open, f.done_all.length], ["post:f-iw-li", "post:f-iw-li", 10]);
+}
+{
+  // the morning op on the same fixture: published rows stay out of the sitting, pieces group as in v14, nothing else moves
+  const { handler } = await fresh();
+  const db = mockDb(Object.assign(tablesFor(), { content_calendar: postingRows() })); globalThis.__sb = db; linearCalls = [];
+  const r = await call(handler, { op: "morning", date: D2, now_min: 600 });
+  const content = r.json.sitting.filter((c) => c.source === "content");
+  eq("G morning (v15): 200, engine v15, the same next rule", [r.status, r.json.engine, r.json.next_rule, r.json.place_rule], [200, "one-today v15", "clock-15", "actions-only"]);
+  eq("G morning: one card per piece, ten pieces, the three published Half Dome rows out", [content.length, content.some((c) => c.posts.some((p) => p.status === "published")), content.some((c) => /Half Dome/.test(c.what))], [10, false, false]);
+  eq("G morning: the three texts are still one card there (the groups op is where they are three)", content.find((c) => c.what === "Three texts to the people whose asks shipped").posts.length, 3);
+  eq("G morning: the card's photo.url stays images only", content.map((c) => c.photo && c.photo.url && /\.pdf/.test(decodeURIComponent(c.photo.url))).some(Boolean), false);
+  eq("G morning writes nothing", db.writes, []);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

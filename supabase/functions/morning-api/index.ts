@@ -1,4 +1,42 @@
-// morning-api v13: THE MATRIX ON THE ENGINE (RULINGS 2026-09-16, the estate by tap). Every card the engine
+// morning-api v15: THE GROUPS OP (RULINGS 2026-10-06, "Yes as drawn, build it": every stepped thing in 29:11 takes one
+// shape, a group with a count that opens to numbered steps; day one is posting). The contract, written before this code:
+// jr-os-docs docs/projects/the-engine/morning-api-v15-contract.md. One op is added; v14 stands whole under it: the
+// morning op, the two views, homes, post, text and every tap are untouched, so the Chart House keeps reading them.
+//
+//   groups  { date?, now_min?, pillar? } -> { date, nice_date, now, now_min, clock, engine, order_rule, next_step_id,
+//             next_by_clock_id, groups:[group], counts:{ groups, total, done, open, held, skipped },
+//             behind:{ count, rows }, text_ready, served_at }
+//           Today's posting rows (content_calendar dated the day, published included, archived out) as groups in his
+//           account order: The Way of Dad, then Fortify, then Maddy, then Reckoning, Career, Door 3, Life (a pillar
+//           with no row is left out). Each row is its own step with its own clock, account, paste text, files, Photos
+//           album, frame, alt and how, so three texts under one piece title are three steps and a piece on three
+//           platforms is three.
+//           group: { key, name, order, accounts:[], albums:[], count:{ total, done, open, held, skipped }, all_done,
+//                    first_open, steps:[step], done_all:[{ card_id, post_id, action }] }
+//           step:  { id: "post:<row>", n, row_id, card_id: "content:<row>", post_id, what, piece, piece_key, platform,
+//                    platform_label, format, story, account, time, due_min, until_min, block, status: open | done |
+//                    held | skipped, done_at, held_until, text:{ body, source: excerpt | hub | vault | none, path, label },
+//                    files:[{ path, name, kind: image | pdf | video | file, url }], photo, frame, photos_album, alt, how,
+//                    why, tap:{ card_id, post_id, action, label }, undo:{ card_id, post_id, action: "undo", label },
+//                    taps, links, pillar, track, placed_by, campaign, step_order, ordered_by, day }
+//           The step order inside a group: metadata.step_order (homebase's order inside the line for the day) first;
+//           rows without it follow by the clock (metadata.slot, else when), a row with no clock last; then the pillar's
+//           platform order (The Way of Dad: X, Bluesky, Instagram, Instagram Story; Fortify: LinkedIn, Instagram,
+//           YouTube, Substack; Maddy: Instagram, Facebook, TikTok, Threads, Reddit, email, other); then the title.
+//           Numbers run 1 to N in that order, never a database number.
+//           The done rule: a row dated the day with status published is a done step with done_at = published_at, so a
+//           group reads 3 of 4. held and skipped read from metadata.morning as on the card.
+//           The undo rule: the existing tap with the row named, { op: "tap", card_id: "content:<row>", action: "undo",
+//           post_id: "<row>" }; a step's tap is likewise the existing posted | sent | done tap with post_id. No group
+//           record is stored; a group's Done is its done_all list (the day-3 op group_done will send it server side).
+//           The paste text: the row's excerpt first; the hub card and the vault file only when the excerpt is empty,
+//           the vault within the 14-file budget, so the budget never starves a step.
+//           metadata.image is a list of relative paths or one string of paths joined by commas; each is resolved
+//           against the folder of metadata.vault_path. An image or a PDF in the vault carries a url on the file door.
+//   GET ?op=photo&path=<vault path> now serves a PDF as well as an image (png, jpg, jpeg, gif, webp, pdf under docs/).
+//   The morning card's photo.url stays images only.
+//
+// (v13, standing whole under v15) THE MATRIX ON THE ENGINE (RULINGS 2026-09-16, the estate by tap). Every card the engine
 // serves carries one pillar and one track, and two views regroup the same cards: a day's posting reads as one
 // body of work across the pillars (by_track), and each pillar reads as one body of work across the tracks
 // (by_pillar). A homes table, read by 29:11's map card, says where everything lives. A direct-post door posts a
@@ -495,6 +533,14 @@ const API_URL = () => (Deno.env.get("SUPABASE_URL") || "") + "/functions/v1/morn
 function isVaultImage(path: string) { return /^docs\/[^\s]+\.(png|jpe?g|gif|webp)$/i.test(path); }
 function photoUrl(path: string) { return isVaultImage(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null; }
 const IMAGE_TYPE: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+// v15: the file door serves a PDF too (a LinkedIn carousel is a PDF in the kit); a video has no url, the Photos album carries it
+const FILE_TYPE: Record<string, string> = Object.assign({ pdf: "application/pdf" }, IMAGE_TYPE);
+function isVaultFile(path: string) { return /^docs\/[^\s]+\.(png|jpe?g|gif|webp|pdf)$/i.test(path); }
+function fileUrl(path: string) { return isVaultFile(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null; }
+function fileKind(path: string): "image" | "pdf" | "video" | "file" {
+  const ext = String(path).split(".").pop()!.toLowerCase();
+  if (IMAGE_TYPE[ext]) return "image"; if (ext === "pdf") return "pdf"; if (/^(mp4|mov|m4v)$/.test(ext)) return "video"; return "file";
+}
 
 // ----- the vault (copy for the cards) -----
 // The GitHub token: the MORNING_GH_TOKEN secret when set, else the eddy_config row
@@ -1200,7 +1246,141 @@ async function compose(sb: any, body: any, viaService: boolean, today: string, n
       }
 
       const counts = { sitting: sitting.length, open: sitting.filter((c) => c.status === "open").length, later: later.reduce((n, d) => n + d.count, 0), behind: behind.reduce((n, g) => n + g.count, 0), undated: undated.total, held: held.total };
-      return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v14", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, matrix, matrix_ready: matrixReady === true, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now };
+      return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, next_rule: "clock-15", place_rule: "actions-only", engine: "one-today v15", next_id: nextCard ? nextCard.id : null, sitting, later, behind, undated, held, doors, week, counts, matrix, matrix_ready: matrixReady === true, linear_error: linearError, links_ready: linksReady, routines_seeded: todaysTemplates.length + legacyToday.length, text_ready: !!(await ghToken()), served_at: now };
+}
+
+// ----- v15: the groups op (RULINGS 2026-10-06, yes as drawn). Today's posting rows as groups in his account order,
+// each row its own numbered step. Reads only; every tap a step carries is a tap the engine already takes. -----
+const GROUP_ORDER = ["wayofdad", "fortify", "maddy", "reckoning", "career", "door3", "life"];
+const STEP_PLATFORMS: Record<string, string[]> = {
+  wayofdad: ["x", "bluesky", "instagram", "instagram story"],
+  fortify: ["linkedin", "instagram", "youtube", "substack"],
+  maddy: ["instagram", "facebook", "tiktok", "threads", "reddit", "email", "other"],
+};
+const STEP_PLATFORMS_ANY = ["x", "bluesky", "linkedin", "instagram", "instagram story", "youtube", "substack", "facebook", "tiktok", "threads", "reddit", "email", "other"];
+const TEXT_LABEL: Record<string, string> = { instagram: "Caption", tiktok: "Caption", facebook: "Caption", threads: "Caption", youtube: "Description" };
+function platformRank(pillar: string, row: any): number {
+  const key = isStory(row) ? "instagram story" : String(row.platform || "");
+  const list = STEP_PLATFORMS[pillar] || STEP_PLATFORMS_ANY;
+  const i = list.indexOf(key);
+  if (i >= 0) return i;
+  const j = STEP_PLATFORMS_ANY.indexOf(key);
+  return list.length + (j >= 0 ? j : STEP_PLATFORMS_ANY.length);
+}
+// metadata.image: a list of relative paths, or one string of paths joined by commas (the kits' insert wrote it so)
+function imageList(m: any): string[] {
+  const v = m?.image;
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof v === "string" && v.trim()) return v.split(",").map((x) => x.trim()).filter(Boolean);
+  return [];
+}
+// a kit's relative path ("assets/map/00-the-map.png") resolved against the folder of the row's vault_path
+function vaultFilePath(rel: string, vaultPath: any): string {
+  const r = String(rel || "");
+  if (/^docs\//.test(r) || /^https?:/.test(r)) return r;
+  const vp = String(vaultPath || "");
+  const dir = vp.includes("/") ? vp.replace(/\/[^/]*$/, "") : "";
+  return dir ? dir + "/" + r.replace(/^\.?\//, "") : r;
+}
+function stepOrderOf(m: any): number | null {
+  const v = m?.step_order;
+  if (Number.isInteger(v)) return v as number;
+  if (typeof v === "string" && /^\d+$/.test(v.trim())) return Number(v.trim());
+  return null;
+}
+// the step's line: the row's title; a "(x)" style suffix reads ", on X"; a Story share reads as on the card
+function stepWhat(row: any): string {
+  if (isStory(row)) return pieceTitle(row).replace(/\s*\(instagram (story|feed)\)\s*$/i, "") + ": share it to your Story";
+  const t = String(row.title || "").trim();
+  const m = t.match(/^(.*?)\s*\((x|bluesky|instagram|threads|linkedin|youtube|tiktok|reddit|facebook|substack|email|other|instagram feed|instagram story)\)\s*$/i);
+  if (m) { const k = m[2].toLowerCase(); return m[1] + ", on " + (k === "instagram feed" ? "the Instagram feed" : k === "instagram story" ? "the Instagram Story" : (PLATFORM_LABEL[k] || m[2])); }
+  return t || pieceTitle(row);
+}
+async function composeGroups(sb: any, body: any, viaService: boolean, today: string, now: string) {
+  const CC = "id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at";
+  const dayQ = await selectWithFallback((cols: string) => sb.from("content_calendar").select(cols).eq("user_id", USER).neq("status", "archived").gte("scheduled_for", today).lte("scheduled_for", today + "T23:59:59").order("scheduled_for"), CC + ", track", CC);
+  if (dayQ.error) throw new Error(dayQ.error.message);
+  const rows: any[] = dayQ.data ?? [];
+  const BC = "id, title, platform, format, status, scheduled_for, campaign, pillar, metadata";
+  const behindQ = await selectWithFallback((cols: string) => sb.from("content_calendar").select(cols).eq("user_id", USER).not("status", "in", "(published,archived)").gte("scheduled_for", addDays(today, -BEHIND_DAYS)).lt("scheduled_for", today).order("scheduled_for"), BC + ", track", BC);
+  const behindRows: any[] = behindQ.data ?? [];
+  const hubRow = (await sb.from("hub_content").select("content").eq("key", "wayofdad").maybeSingle()).data;
+  const hubCards = new Map<number, any>(); for (const c of (hubRow?.content?.cards || [])) hubCards.set(Number(c.day), c);
+  const only = body.pillar != null ? String(body.pillar) : null;
+  const byPillar = new Map<string, any[]>();
+  for (const r of rows) { const p = contentPlace(r).pillar; if (!byPillar.has(p)) byPillar.set(p, []); byPillar.get(p)!.push(r); }
+  let fetches = 0;
+  const groups: any[] = [];
+  for (const key of GROUP_ORDER) {
+    if (only && key !== only) continue;
+    const list = byPillar.get(key);
+    if (!list || !list.length) continue;
+    const keyed = list.map((r: any) => { const m = r.metadata || {}; const clock = slotClock(m); return { r, m, so: stepOrderOf(m), clock, due: clock ? minOf(clock) : null, rank: platformRank(key, r) }; });
+    keyed.sort((a, b) => (a.so == null ? 1 : 0) - (b.so == null ? 1 : 0) || (a.so ?? 0) - (b.so ?? 0) || (a.due ?? 9999) - (b.due ?? 9999) || a.rank - b.rank || String(a.r.title || "").localeCompare(String(b.r.title || "")));
+    const steps: any[] = [];
+    for (let i = 0; i < keyed.length; i++) {
+      const { r, m, so, clock, due } = keyed[i];
+      const story = isStory(r);
+      const morning = m.morning || {};
+      const heldUntil = morning.held_until && morning.held_until > today ? morning.held_until : null;
+      const status = r.status === "published" ? "done" : heldUntil ? "held" : morning.skipped === today ? "skipped" : "open";
+      // the paste text: the excerpt first; the hub card and the vault only when the excerpt is empty, the vault within the budget
+      let text: string | null = null; let source: "excerpt" | "hub" | "vault" | "none" = "none";
+      if (r.excerpt && String(r.excerpt).trim()) { text = String(r.excerpt).trim(); source = "excerpt"; }
+      else if (!story) {
+        const hub = m.day != null && key === "wayofdad" ? hubCards.get(Number(m.day)) : null;
+        if (hub) { text = (r.platform === "instagram" ? hub.ig : hub.x) || null; if (text) source = "hub"; }
+        if (!text && fetches < 14) { for (const path of copyPaths(r)) { fetches++; text = await vaultText(path); if (text) { source = "vault"; break; } if (fetches >= 14) break; } }
+        if (text) text = text.trim();
+      }
+      const files = imageList(m).map((rel) => { const path = vaultFilePath(rel, m.vault_path); return { path, name: path.split("/").pop() || path, kind: fileKind(path), url: fileUrl(path) }; });
+      const img = files.find((f) => f.kind === "image");
+      const alt = m.alt ? String(m.alt) : null;
+      const photo = img ? { path: img.path, alt, url: img.url } : m.frame ? { path: String(m.frame), alt, url: null } : null;
+      const label = story ? "Shared to the Story" : tapLabel(r.platform, r.format);
+      const action = (story ? "Posted" : label).toLowerCase();
+      const cardId = "content:" + r.id;
+      const tap = { card_id: cardId, post_id: r.id, action, label };
+      const undo = { card_id: cardId, post_id: r.id, action: "undo", label: "Undo" };
+      const links: any[] = [];
+      if (m.vault_path) links.push({ label: "The file", href: "https://github.com/" + REPO + "/blob/main/" + m.vault_path });
+      if (m.plan_page) links.push({ label: "The plan page", href: "https://github.com/" + REPO + "/blob/main/" + m.plan_page });
+      if (m.plan_artifact || m.show_artifact) links.push({ label: "The plan", href: m.plan_artifact || m.show_artifact });
+      const how = story ? [m.send_note, STORY_HOW].filter(Boolean).join(" ") : (m.send_note ? String(m.send_note) : null);
+      steps.push({
+        id: "post:" + r.id, n: i + 1, row_id: r.id, card_id: cardId, post_id: r.id,
+        what: stepWhat(r), piece: pieceTitle(r), piece_key: groupKey(r),
+        platform: story ? "instagram story" : r.platform, platform_label: platLabel(r), format: r.format || null, story,
+        account: m.account ? String(m.account) : null,
+        time: clock, due_min: due, until_min: untilOf(due), block: clock ? blockOf(clock) : "Any time",
+        status, done_at: status === "done" ? (r.published_at || null) : null, held_until: heldUntil,
+        text: { body: text, source, path: m.vault_path ? String(m.vault_path) : null, label: TEXT_LABEL[r.platform] || "Text" },
+        files, photo, frame: m.frame ? String(m.frame) : null, photos_album: m.photos_album ? String(m.photos_album) : null, alt, how: how || null, why: m.why ? String(m.why) : null,
+        tap, undo,
+        taps: status === "done" ? [undo] : [tap, { action: "hold", label: "Hold", post_id: r.id }, { action: "skip", label: "Skip", post_id: r.id }],
+        links, ...contentPlace(r), campaign: r.campaign || null, step_order: so, ordered_by: so != null ? "step_order" : due != null ? "clock" : "platform", day: today,
+      });
+    }
+    const uniq = (xs: any[]) => [...new Set(xs.filter(Boolean))];
+    const count = { total: steps.length, done: steps.filter((s) => s.status === "done").length, open: steps.filter((s) => s.status === "open").length, held: steps.filter((s) => s.status === "held").length, skipped: steps.filter((s) => s.status === "skipped").length };
+    const firstOpen = steps.find((s) => s.status === "open") || null;
+    groups.push({
+      key, name: PILLARS[key], order: GROUP_ORDER.indexOf(key) + 1,
+      accounts: uniq(steps.map((s) => s.account)), albums: uniq(steps.map((s) => s.photos_album)),
+      count, all_done: count.total > 0 && count.done === count.total, first_open: firstOpen ? firstOpen.id : null,
+      steps, done_all: steps.filter((s) => s.status === "open").map((s) => ({ card_id: s.card_id, post_id: s.post_id, action: s.tap.action })),
+    });
+  }
+  const all = groups.flatMap((g) => g.steps);
+  let nowMin: number; let clock: "pacific" | "test" = "pacific";
+  if (viaService && Number.isInteger(body.now_min) && body.now_min >= 0 && body.now_min <= 1439) { nowMin = body.now_min; clock = "test"; }
+  else if (today === ptToday()) nowMin = ptMinute();
+  else nowMin = today > ptToday() ? 0 : 1439;
+  const firstOpen = all.find((s) => s.status === "open") || null;
+  const byClock = pickNext(all, nowMin);
+  const counts = { groups: groups.length, total: all.length, done: all.filter((s) => s.status === "done").length, open: all.filter((s) => s.status === "open").length, held: all.filter((s) => s.status === "held").length, skipped: all.filter((s) => s.status === "skipped").length };
+  const behind = { count: behindRows.length, rows: behindRows.map((r: any) => ({ id: "post:" + r.id, row_id: r.id, what: stepWhat(r), day: String(r.scheduled_for || "").slice(0, 10), pillar: contentPlace(r).pillar, platform: isStory(r) ? "instagram story" : r.platform })) };
+  return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, engine: "one-today v15", order_rule: "account-order; step_order, then the clock, then the platform", next_step_id: firstOpen ? firstOpen.id : null, next_by_clock_id: byClock ? byClock.id : null, groups, counts, behind, text_ready: !!(await ghToken()), served_at: now };
 }
 
 Deno.serve(async (req: Request) => {
@@ -1217,13 +1397,13 @@ Deno.serve(async (req: Request) => {
     const okTok = !!given && (acceptedG.includes(await sha256hex(given)) || (given === serviceG) || (given.length > 20 && await serviceProbe(given)));
     if (!okTok) return j({ error: "bad token" }, headers, 403);
     const path = u.searchParams.get("path") || "";
-    if (!isVaultImage(path)) return j({ error: "not a vault image" }, headers, 400);
+    if (!isVaultFile(path)) return j({ error: "not a vault image or PDF" }, headers, 400);
     const gh = await ghToken();
     if (!gh) return j({ error: "MORNING_GH_TOKEN not set" }, headers, 503);
     const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, { headers: { authorization: "Bearer " + gh, "user-agent": "morning-api", accept: "application/vnd.github.raw+json" } });
     if (!r.ok) return j({ error: "vault " + r.status }, headers, r.status === 404 ? 404 : 502);
     const ext = path.split(".").pop()!.toLowerCase();
-    return new Response(r.body, { status: 200, headers: { "Access-Control-Allow-Origin": headers["Access-Control-Allow-Origin"], "Content-Type": IMAGE_TYPE[ext] || "application/octet-stream", "Cache-Control": "private, max-age=3600" } });
+    return new Response(r.body, { status: 200, headers: { "Access-Control-Allow-Origin": headers["Access-Control-Allow-Origin"], "Content-Type": FILE_TYPE[ext] || "application/octet-stream", "Cache-Control": "private, max-age=3600" } });
   }
   if (req.method !== "POST") return j({ error: "POST only" }, headers, 405);
   let body: any;
@@ -1252,6 +1432,12 @@ Deno.serve(async (req: Request) => {
       const only = body[by] != null ? String(body[by]) : undefined;
       if (only && !(by === "pillar" ? LINE : TRACK_SET).has(only)) return j({ error: "no such " + by + ": " + only }, headers, 400);
       return j(regroup(out, by as "pillar" | "track", only), headers);
+    }
+
+    if (body.op === "groups") {
+      // v15: today's posts as groups in his account order; reads only, the taps it names are the taps above
+      if (body.pillar != null && !LINE.has(String(body.pillar))) return j({ error: "no such pillar: " + body.pillar }, headers, 400);
+      return j(await composeGroups(sb, body, viaService, today, now), headers);
     }
 
     if (body.op === "homes") {
