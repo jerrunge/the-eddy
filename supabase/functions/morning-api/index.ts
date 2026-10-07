@@ -533,10 +533,17 @@ const API_URL = () => (Deno.env.get("SUPABASE_URL") || "") + "/functions/v1/morn
 function isVaultImage(path: string) { return /^docs\/[^\s]+\.(png|jpe?g|gif|webp)$/i.test(path); }
 function photoUrl(path: string) { return isVaultImage(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null; }
 const IMAGE_TYPE: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
-// v15: the file door serves a PDF too (a LinkedIn carousel is a PDF in the kit); a video has no url, the Photos album carries it
+// v15: the file door serves a PDF too (a LinkedIn carousel is a PDF in the kit). The url on a step's file is one a
+// browser can open from the Open tap: the vault page on GitHub, where a video plays and a PDF or a video downloads
+// (the ?op=photo door wants the device token in a header, which Safari never sends). His words 2026-10-07, on the
+// body reel: "There's no link in 29:11 and no way for me to find." An image keeps the door: the app renders it itself.
 const FILE_TYPE: Record<string, string> = Object.assign({ pdf: "application/pdf" }, IMAGE_TYPE);
 function isVaultFile(path: string) { return /^docs\/[^\s]+\.(png|jpe?g|gif|webp|pdf)$/i.test(path); }
-function fileUrl(path: string) { return isVaultFile(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null; }
+function isVaultPath(path: string) { return /^docs\/[^\s]+\.[A-Za-z0-9]+$/.test(path); }
+function fileUrl(path: string) {
+  if (fileKind(path) === "image") return isVaultFile(path) ? API_URL() + "?op=photo&path=" + encodeURIComponent(path) : null;
+  return isVaultPath(path) ? "https://github.com/" + REPO + "/blob/main/" + path : null;
+}
 function fileKind(path: string): "image" | "pdf" | "video" | "file" {
   const ext = String(path).split(".").pop()!.toLowerCase();
   if (IMAGE_TYPE[ext]) return "image"; if (ext === "pdf") return "pdf"; if (/^(mp4|mov|m4v)$/.test(ext)) return "video"; return "file";
