@@ -1,0 +1,319 @@
+[
+ {
+  "id": "e105e553-927d-45f6-ad91-abaa19c3f40d",
+  "title": "Replies. Fifteen minutes.",
+  "steps": [
+   "Answer everyone who replied to you.",
+   "One useful sentence in each of the five X rooms.",
+   "Three on Bluesky, inside the pinned feeds."
+  ]
+ },
+ {
+  "id": "85181c81-89da-48cc-bfa8-f8c2a3301d8c",
+  "title": "The DM check",
+  "steps": [
+   "Open the DMs on X, Bluesky and Instagram.",
+   "A new DM gets First reply, from the scripts.",
+   "Once they say what is going on: Offer, the two times and the price."
+  ]
+ },
+ {
+  "id": "79e4165f-5fbc-4817-995c-c3a772450bae",
+  "title": "Back and chest, with Maddy: two minutes",
+  "steps": [
+   "Hand Maddy the tube.",
+   "A thin layer across the back, chest and shoulders, around open spots."
+  ]
+ },
+ {
+  "id": "e8617b53-eaf4-479f-934c-bfc84b7b0be9",
+  "title": "Breakfast",
+  "steps": [
+   "Get the eggs out.",
+   "Five eggs over easy, two protein toast, sauteed greens, kimchi."
+  ]
+ },
+ {
+  "id": "2eea2a56-4a89-4e7e-8dd2-b813d12fac25",
+  "title": "Athlete's foot care",
+  "steps": [
+   "Wash and dry the feet.",
+   "The antifungal on both.",
+   "Clean socks."
+  ]
+ },
+ {
+  "id": "40398584-b5e7-429b-8281-13372c3a4121",
+  "title": "Clay mask (Fridays)",
+  "steps": [
+   "Open the jar.",
+   "Clay mask on the nose and pores, ten to fifteen minutes.",
+   "Rinse, then the night routine."
+  ]
+ },
+ {
+  "id": "b1da00e7-32b1-4632-a459-bacdf6eb94e2",
+  "title": "Train",
+  "steps": [
+   "Put your gym shoes on.",
+   "Today's session, every set."
+  ]
+ },
+ {
+  "id": "f158bcca-7300-4621-b9ea-65cb2039965c",
+  "title": "Cooper out + outdoor stretch (8 moves)",
+  "steps": [
+   {
+    "what": "Standing hip flexor lunge, 45 seconds a side, 2 rounds.",
+    "sub": "Anterior tilt - ED support - 45 sec each side",
+    "why": "Tight hip flexors are the #1 driver of anterior pelvic tilt and compress the pelvic floor. Releasing them daily targets your tilt, SI pressure, and blood flow through the pelvic region.",
+    "cues": [
+     "Step one foot forward into a lunge. Front knee over ankle, back leg straight.",
+     "Keep torso upright and hips square to the front.",
+     "Shift forward until you feel a stretch deep in the front of the back hip.",
+     "Hold 45 sec. Switch sides. 2 rounds each."
+    ],
+    "time": "90 sec total"
+   },
+   {
+    "what": "Standing figure-4, 45 seconds a side.",
+    "sub": "SI joint - ED support - 45 sec each side",
+    "why": "The piriformis sits directly next to the pudendal nerve. A tight piriformis = nerve compression. Also relieves SI joint tension.",
+    "cues": [
+     "Stand near a wall or fence. Cross one ankle over the opposite knee.",
+     "Slowly sit back and down until you feel a deep stretch in the glute of the crossed leg.",
+     "Keep spine long. Breathe into the stretch.",
+     "Hold 45 sec. Switch sides."
+    ],
+    "time": "90 sec total"
+   },
+   {
+    "what": "Standing pelvic tilts, 15 to 20 reps.",
+    "sub": "Anterior tilt - Low back reset - 60 sec",
+    "why": "Teaches your pelvis what neutral actually feels like. Living in anterior tilt compresses the SI joint and shortens the pelvic floor chronically.",
+    "cues": [
+     "Feet hip-width, soft knees. Hands on hip bones.",
+     "Exaggerate your low back arch (your default anterior tilt).",
+     "Tuck tailbone under, squeeze glutes gently, flatten low back.",
+     "Rock slowly between the two, finding neutral. 15-20 reps."
+    ],
+    "time": "~60 sec"
+   },
+   {
+    "what": "Standing side bend, 30 seconds a side, 2 rounds.",
+    "sub": "Full spine - SI joint - QL - 30 sec each side",
+    "why": "Opens the quadratus lumborum - the muscle that frequently pulls the SI joint out of alignment. Also decompresses the thoracic spine and stretches the lateral shoulder capsule.",
+    "cues": [
+     "Stand tall, feet hip-width. Raise one arm straight overhead, palm facing in.",
+     "Lean slowly to the opposite side - feel the stretch from hip through shoulder.",
+     "Both feet planted, hips square.",
+     "Hold 30 sec each side. 2 rounds each."
+    ],
+    "time": "120 sec total"
+   },
+   {
+    "what": "Cross-body shoulder stretch, 30 seconds a side, 3 rounds.",
+    "sub": "Posterior capsule - Rotator cuff - 30 sec x3 each side",
+    "why": "The posterior shoulder capsule is one of the most commonly tight structures in lifters. Tightness causes internal rotation, impingement, and compensatory forward head posture.",
+    "cues": [
+     "Bring one arm across your chest at shoulder height.",
+     "Use the opposite hand to support the elbow - gentle pressure inward, not downward.",
+     "Feel the stretch in the back of the shoulder. Shoulder blade relaxed and down.",
+     "Hold 30 sec. Switch sides. 3 rounds each."
+    ],
+    "time": "3 min total"
+   },
+   {
+    "what": "Diaphragmatic breath with the pelvic floor release, 8 to 10 breaths.",
+    "sub": "ED support - Pelvic floor - Nervous system - ~2 min",
+    "why": "Weightlifters almost universally develop a hypertonic pelvic floor. Deliberate release on the inhale improves blood flow and nerve signaling. Most important move on the list. Pair with Pulsetto.",
+    "cues": [
+     "Stand or sit. One hand on belly, one on chest.",
+     "Inhale slowly through nose for 4-5 counts. Belly rises, chest stays still.",
+     "As you inhale, consciously let go of your pelvic floor - release downward.",
+     "Exhale slowly for 5-6 counts. 8-10 breaths total."
+    ],
+    "time": "~2 min"
+   },
+   {
+    "what": "Doorway chest opener, 30 seconds, 3 rounds.",
+    "sub": "Pec minor/major - Anterior shoulder - 30 sec x3",
+    "why": "Heavy pressing and rowing chronically shortens the pec minor, tilting the scapula forward and internally rotating the shoulder. One of the most prescribed interventions in shoulder rehabilitation.",
+    "cues": [
+     "Stand in a doorframe. Both forearms on the frame, elbows at 90 degrees.",
+     "Step one foot through and shift forward until you feel the stretch.",
+     "Core lightly engaged - avoid arching the low back.",
+     "Hold 30 sec. Rest 10 sec. Repeat 3 rounds."
+    ],
+    "time": "~2 min"
+   },
+   {
+    "what": "Standing thoracic extension, 10 to 12 reps.",
+    "sub": "Upper back - T-spine mobility - Shoulder overhead path - 60 sec",
+    "why": "Thoracic kyphosis is the single biggest limiter of overhead pressing range and a major driver of shoulder impingement. Daily T-spine extension is one of the highest-value shoulder investments on this list.",
+    "cues": [
+     "Stand tall. Interlace hands behind head, elbows wide.",
+     "Gently draw elbows back and open chest toward ceiling. Mid-back is the hinge point.",
+     "Hold 2-3 seconds, breathing into the stretch. Return to neutral. 10-12 reps.",
+     "Keep low back relaxed - this is thoracic extension, not lumbar."
+    ],
+    "time": "~60 sec"
+   }
+  ]
+ },
+ {
+  "id": "f75f4080-e932-48eb-849a-cb986fa27cf1",
+  "title": "Shower + skincare + teeth",
+  "steps": [
+   {
+    "what": "Phone face down first. No news, no email, no scroll.",
+    "why": "Cortisol peaks 20 to 30 minutes after waking, and phone contact there derails the whole day.",
+    "cues": [
+     "Set the phone down, screen to the table. No news, no email, no scroll."
+    ],
+    "time": "before anything"
+   },
+   {
+    "what": "Shower and teeth. Nothing to decide, the order is already set.",
+    "cues": [
+     "Warm shower, brush teeth. Nothing to decide, the order is already set."
+    ],
+    "time": "~6 min"
+   },
+   {
+    "what": "The hum: in the shower, 30 seconds, low and steady.",
+    "why": "Humming vibrates the throat and stimulates the vagus nerve directly.",
+    "cues": [
+     "In the shower, hum for 30 seconds. Low and steady."
+    ],
+    "time": "~30 sec"
+   },
+   {
+    "what": "Face and simple skin: cleanse, moisturise.",
+    "cues": [
+     "Cleanse, moisturise. Quick and kind. Done is clean, not perfect."
+    ],
+    "time": "~2 min"
+   }
+  ]
+ },
+ {
+  "id": "2b732b94-af31-4154-ad51-945808420c37",
+  "title": "Evening stretch, 8 min",
+  "steps": [
+   {
+    "what": "Supine figure-4 hip release, 60 seconds a side.",
+    "sub": "SI joint - Pelvic floor - 60 sec each side",
+    "why": "Same piriformis release as the morning, but lying down - gravity-assisted and deeper. Excellent for resetting SI joint tension from the day and gym.",
+    "cues": [
+     "Lie on your back, knees bent. Cross one ankle over the opposite knee.",
+     "Either stay here if you feel stretch, or gently draw both legs toward your chest.",
+     "Breathe slowly into the stretch. Let the floor hold you.",
+     "Hold 60 sec. Switch sides."
+    ],
+    "time": "2 min total"
+   },
+   {
+    "what": "Supine spinal twist, 60 seconds a side.",
+    "sub": "Low back - SI joint - 60 sec each side",
+    "why": "Decompresses the lumbar spine, releases the SI joint, and gently massages the digestive organs. Completely passive end-of-day reset.",
+    "cues": [
+     "Lie on your back. Draw one knee to your chest.",
+     "Gently guide that knee across your body toward the floor on the opposite side.",
+     "Extend same-side arm at shoulder height. Look away from the knee.",
+     "Hold 60 sec. Switch sides."
+    ],
+    "time": "2 min total"
+   },
+   {
+    "what": "Child's pose, 90 seconds.",
+    "sub": "Full spine - Hip flexors - Low back - 90 sec",
+    "why": "Lengthens the entire posterior chain and activates the parasympathetic nervous system through gentle forward folding.",
+    "cues": [
+     "From kneeling, sink hips back toward heels.",
+     "Walk hands forward until you feel a gentle stretch. Arms relaxed.",
+     "Rest forehead on floor or pillow. Soften everything.",
+     "Hold 90 sec. Breathe deeply into your lower back."
+    ],
+    "time": "90 sec"
+   }
+  ]
+ },
+ {
+  "id": "0e892e24-eb30-4369-9425-0e12ad6d4a33",
+  "title": "Breathwork, Tier 2 or 3",
+  "steps": [
+   {
+    "what": "Tier 1, the diaphragmatic reset: in 4, pause 1, out 6 to 8.",
+    "sub": "Tier 1 - Foundation - Daily - 5 minutes, lying on your back, knees bent, feet flat",
+    "why": "The foundation. The exhale is the master key: it tells the nervous system the day is safe.",
+    "cues": [
+     "Inhale through your nose for 4 counts. Belly rises, chest stays still.",
+     "Pause at the top for 1 count.",
+     "Exhale through your nose for 6-8 counts. Belly softens.",
+     "On the inhale, invite your perineum to drop. On the exhale, let it gently return to neutral. Not a Kegel: you are removing the chronic grip.",
+     "Target: 10-15 breath cycles, about 5 minutes."
+    ],
+    "time": "5 min"
+   },
+   {
+    "what": "Tier 2, the extended exhale: in 4, out 6 to 8, by the week.",
+    "sub": "Tier 2 - Vagus nerve - Add after 1-2 weeks",
+    "why": "Exhaling longer than you inhale is one of the most direct ways to activate the vagus nerve.",
+    "cues": [
+     "Weeks 1-2: inhale 4, exhale 6.",
+     "Weeks 3-4: inhale 4, exhale 7.",
+     "Week 5 and on: inhale 4, exhale 8.",
+     "Do not rush to the 1:2 ratio. The nervous system needs time to trust it."
+    ],
+    "time": "5-10 min"
+   },
+   {
+    "what": "Tier 3, the 0.1 Hz protocol: in 5, out 5, ten minutes.",
+    "sub": "Tier 3 - Resonance - Add when Tier 2 feels natural",
+    "why": "About 6 breaths per minute. Amplifies heart rate variability; used in clinical HRV training.",
+    "cues": [
+     "Inhale 5 counts, exhale 5 counts. 6 breaths per minute.",
+     "Add pelvic floor coordination: notice on the inhale, consciously release and drop on the exhale.",
+     "Duration: 10 minutes."
+    ],
+    "time": "10 min"
+   }
+  ]
+ },
+ {
+  "id": "bd2ad046-cf42-49f1-a351-c6c93f1ca07c",
+  "title": "Night skincare",
+  "steps": [
+   {
+    "what": "Cetaphil cleanser.",
+    "cues": [
+     "Remove the day: sunscreen, sebum, environmental particulates."
+    ],
+    "time": "30 sec"
+   },
+   {
+    "what": "CeraVe resurfacing retinol serum, pea sized, on the ramp's nights.",
+    "why": "The twenty minute wait is not real, and a twenty minute stall is what kills a 10pm routine.",
+    "cues": [
+     "Pea sized, whole face. Apply about sixty seconds after towel drying, to skin that feels dry."
+    ],
+    "time": "20 sec"
+   },
+   {
+    "what": "Brickell eye cream, ring finger, along the orbital bone.",
+    "cues": [
+     "After the retinol, before the moisturizer. Wash hands first. Ring finger only, tap along the orbital bone from the outer corner inward."
+    ],
+    "time": "20 sec"
+   },
+   {
+    "what": "Cetaphil lotion.",
+    "cues": [
+     "Lock in moisture after the retinol. Seals the barrier and reduces flaking."
+    ],
+    "time": "20 sec"
+   }
+  ]
+ }
+]

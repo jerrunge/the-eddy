@@ -565,5 +565,143 @@ const ids = (g) => g.steps.map((s) => s.row_id);
   eq("G file door: a path outside docs/ is refused", await get("supabase/functions/morning-api/index.ts"), [400, "not a vault image or PDF"]);
 }
 
+
+// ================= H. v15 day two (RULINGS 2026-10-06, yes as drawn; the drawing's day two): the routines and the medicines join the groups =================
+// The fixture is Thu 10-08's real shape (read live 8:15am PT): a subset of his checklist_templates rows as the hub carries them, the
+// steps written by migration routine_steps_01 (scripts/routine-steps-01.json, the same file the migration was generated from), the
+// medications by window, a done mark, a skip, a hold and one medicine taken.
+const D3 = "2026-10-08";
+const FILL = new Map(JSON.parse(readFileSync(fileURLToPath(new URL("./routine-steps-01.json", import.meta.url)), "utf8")).map((r) => [r.id, r.steps]));
+const T = (id, title, anchor, sort, extra = {}) => Object.assign({ id, user_id: USER_ID, title, anchor, sort_order: sort, time: null, window_start: null, window_end: null, door: null, cadence: "daily", days: null, starts_on: null, ends_on: null, paused: false, kind: "self", key: null, why: null, first_physical_motion: null, rung_full: null, rung_reduced: null, rung_floor: null, copy: null, ask: null, links: null, source_path: null, pillar: "life", track: "health", steps: FILL.get(id) ?? null }, extra);
+const SHOWER = "f75f4080-e932-48eb-849a-cb986fa27cf1", COOPER = "f158bcca-7300-4621-b9ea-65cb2039965c", BREAKFAST = "e8617b53-eaf4-479f-934c-bfc84b7b0be9", TRAIN = "b1da00e7-32b1-4632-a459-bacdf6eb94e2";
+const EVE = "2b732b94-af31-4154-ad51-945808420c37", BACK = "79e4165f-5fbc-4817-995c-c3a772450bae", CLAY = "40398584-b5e7-429b-8281-13372c3a4121", FEET = "2eea2a56-4a89-4e7e-8dd2-b813d12fac25";
+const REPLIES = "e105e553-927d-45f6-ad91-abaa19c3f40d", DMS = "85181c81-89da-48cc-bfa8-f8c2a3301d8c";
+function dayTemplates() {
+  return [
+    T(SHOWER, "Shower + skincare + teeth", "wake", 0, { rung_full: "Shower, skincare, teeth.", rung_reduced: "Shower and teeth.", rung_floor: "Splash your face and brush your teeth." }),
+    T(COOPER, "Cooper out + outdoor stretch (8 moves)", "wake", 1, { kind: "body", rung_full: "Cooper out, then the eight moves.", rung_reduced: "Cooper out, then three moves.", rung_floor: "Put the leash on Cooper." }),
+    T("coffee", "Coffee", "levo_gap_closed", 3, { kind: "food", key: "coffee", why: "Levothyroxine needs its hour alone before anything else.", rung_full: "Coffee, once the levo hour has closed.", rung_reduced: "Coffee.", rung_floor: "Fill the kettle." }),
+    T(BREAKFAST, "Breakfast", "levo_gap_closed", 5, { kind: "food", key: "breakfast", rung_full: "Five eggs over easy, two protein toast, sauteed greens, kimchi.", rung_reduced: "Five eggs over easy, one protein toast, greens.", rung_floor: "Five eggs and the greens." }),
+    T("trt-thu", "Testosterone, the half dose, Thursday morning", "wake", 910, { time: "7:00am", door: "house", days: [4], kind: "body", first_physical_motion: "Wash hands, open the kit.", rung_full: "The half dose, 0.35 mL (70 mg of the 200 mg per mL vial), the site rotated from last time, then the row tapped so the log carries the time." }),
+    T("lunch", "Lunch", "meal_start", 1, { kind: "food", window_start: "12:00:00", window_end: "14:00:00", rung_full: "Pick one: chicken, shrimp, tuna, turkey, cod, or last night's protein. Eight ounces, a pile of vegetables, a teaspoon of oil." }),
+    T(TRAIN, "Train", "gym_leave", 6, { kind: "body", days: [1, 2, 3, 4, 5, 6], rung_full: "Today's session, every set.", rung_floor: "Put your gym shoes on." }),
+    T(EVE, "Evening stretch, 8 min (Supine Figure-4, Spinal Twist, Child's Pose)", "wind_down", 10, { kind: "body", rung_full: "The three evening moves, eight minutes." }),
+    T(BACK, "Back and chest, with Maddy: two minutes", "wind_down", 13, { kind: "body", starts_on: "2026-09-18", first_physical_motion: "Hand her the tube.", links: { cart: "https://example.invalid/cart" }, rung_full: "A thin layer of adapalene on dry skin across the back, chest and shoulders." }),
+    T(CLAY, "Clay mask", "wind_down", 13, { cadence: "weekly", days: [5], rung_full: "Clay mask on the nose and pores, ten to fifteen minutes, then the night routine." }),
+    T(FEET, "Athlete's foot care", "wind_down", 999, { kind: "body", rung_full: "Wash and dry the feet, the antifungal on both, clean socks." }),
+    T("prazosin", "Prazosin, at bedtime", "lights_down", 913, { kind: "meds", door: "house", days: [0, 1, 2, 3, 4, 5, 6], pillar: null, track: null }),
+    T("trazodone", "Trazodone, only if you want it", "lights_down", 914, { kind: "meds", door: "house", cadence: "as_needed", starts_on: "2026-09-25", pillar: null, track: null }),
+    T("counter", "Kitchen counter clear, soap dispenser + utensil crock only", "close", 10, { kind: "home", rung_full: "Counter clear, soap and crock only." }),
+    T("locks", "Lock doors, check windows", "close", 41, { kind: "home", rung_full: "Doors locked, windows checked." }),
+    T(REPLIES, "Replies. Fifteen minutes.", "wake", 110, { time: "7:45am", door: "wayofdad", days: [0, 1, 2, 3, 4, 5, 6], kind: "work", ask: "how many replies", pillar: "wayofdad", track: "replies", copy: [{ label: "The five X rooms", text: "@drjoekort\n@MattBaume" }], links: [{ href: "https://x.com/notifications", label: "X notifications" }], rung_full: "Answer everyone who replied, then one useful sentence in each of the five X rooms, then three on Bluesky in the pinned feeds." }),
+    T(DMS, "The DM check. Answer every DM within the day.", "wake", 111, { time: "7:50am", door: "wayofdad", days: [0, 1, 2, 3, 4, 5, 6], kind: "work", ask: "how many DMs", pillar: "wayofdad", track: "replies" }),
+    T("paused", "A paused row", "wake", 2, { paused: true }),
+    T("ended", "Morning read, ended", "wake", 900, { ends_on: "2026-09-20" }),
+  ];
+}
+const MED = (id, name, timing, dose = null) => ({ id, name, dose, timing, active: true });
+function dayTables(extra = {}) {
+  const wod = postingRows().filter((r) => r.pillar === "wayofdad").map((r) => Object.assign({}, r, { scheduled_for: D3, published_at: r.published_at ? D3 + "T14:43:52.872+00:00" : null }));
+  return Object.assign(tablesFor(), {
+    content_calendar: wod,
+    checklist_templates: dayTemplates(),
+    checklist_completions: [
+      { template_id: SHOWER, date: D3, completed_at: D3 + "T14:10:00Z", skipped: false, value: null, source: "face", action: "done" },
+      { template_id: "coffee", date: D3, completed_at: D3 + "T14:40:00Z", skipped: true, value: null, source: "face", action: "skip" },
+      { template_id: "lunch", date: D3, completed_at: D3 + "T15:00:00Z", skipped: true, value: null, source: "face", action: "hold", held_to: "2026-10-09" },
+    ],
+    medications: [MED("levo", "Levothyroxine", "on_waking"), MED("losartan", "Losartan", "with_breakfast", "100mg"), MED("omega", "Omega-3", "with_breakfast"), MED("tyrosine", "L-Tyrosine", "pre_gym", "750mg"), MED("trt-med", "Testosterone", "weekly", "0.35 mL"), MED("mag", "Magnesium Glycinate", "bedtime")],
+    med_log: [{ medication_id: "levo", med_name: "Levothyroxine", taken_at: D3 + "T14:01:00Z", date: D3 }],
+  }, extra);
+}
+async function dayGroups(body = {}, tables) {
+  const { handler } = await fresh();
+  const db = mockDb(tables || dayTables());
+  globalThis.__sb = db;
+  const r = await call(handler, Object.assign({ op: "groups", date: D3, now_min: 480 }, body));
+  return { r, d: r.json, db };
+}
+const whats = (g) => g.steps.map((s) => s.what);
+{
+  const { r, d, db } = await dayGroups();
+  eq("H 200, still v15, the op writes nothing", [r.status, d.engine, db.writes], [200, "one-today v15", []]);
+  eq("H the parts of the day, in order, each a routine group", d.day_groups.map((g) => [g.order, g.key, g.kind, g.name, g.block]), [[1, "day:wake", "routine", "The morning routine", "Wake"], [2, "day:midday", "routine", "The midday routine", "Midday"], [3, "day:evening", "routine", "The evening routine", "Evening"], [4, "day:close", "routine", "The close", "Close"]]);
+  const wake = d.day_groups[0], mid = d.day_groups[1], eve = d.day_groups[2], close = d.day_groups[3];
+  eq("H the morning: on waking first, then the clock and the row's sort, the with-breakfast medicines right after Breakfast, the weekly one at its clock", whats(wake), ["Levothyroxine, on waking", "Shower + skincare + teeth", "Cooper out + outdoor stretch (8 moves)", "Testosterone, the half dose, Thursday morning", "Coffee", "Breakfast", "Losartan 100mg, with breakfast", "Omega-3, with breakfast", "Testosterone 0.35 mL, thursday, weekly"]);
+  eq("H numbers run 1 to N", wake.steps.map((s) => s.n), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  eq("H the kicker reads the first and last clock", [wake.kicker, close.kicker], ["7:00am to 9:00am", "From 9:00pm"]);
+  eq("H the midday: Lunch held, the walk to the gym's medicine, Train", [whats(mid), mid.steps[0].status, mid.steps[0].held_until], [["Lunch", "L-Tyrosine 750mg, before the gym", "Train"], "held", "2026-10-09"]);
+  eq("H the evening: the clay mask is a Friday row and is absent; prazosin, then trazodone optional, then the bedtime medicine last", whats(eve), ["Evening stretch, 8 min (Supine Figure-4, Spinal Twist, Child's Pose)", "Back and chest, with Maddy: two minutes", "Athlete's foot care", "Prazosin, at bedtime", "Trazodone, only if you want it", "Magnesium Glycinate, bedtime"]);
+  eq("H the close in the row's sort", whats(close), ["Kitchen counter clear, soap dispenser + utensil crock only", "Lock doors, check windows"]);
+  eq("H a paused row and an ended row are absent", d.day_groups.some((g) => g.steps.some((s) => /paused|ended/i.test(s.what))), false);
+  const shower = wake.steps[1], levo = wake.steps[0], coffee = wake.steps[4], cooper = wake.steps[2], breakfast = wake.steps[5];
+  eq("H a done mark: done with its time", [shower.status, shower.done_at], ["done", D3 + "T14:10:00Z"]);
+  eq("H a skip: skipped, not done", [coffee.status, coffee.done_at], ["skipped", null]);
+  eq("H a medicine taken: done with taken_at", [levo.kind, levo.status, levo.done_at, levo.tag, levo.timing], ["medicine", "done", D3 + "T14:01:00Z", "medicine", "on_waking"]);
+  eq("H a routine's tap and undo are the routine card's (routine:<id>, done, Done)", [cooper.card_id, cooper.tap, cooper.undo, cooper.taps], ["routine:" + COOPER, { card_id: "routine:" + COOPER, post_id: null, action: "done", label: "Done" }, { card_id: "routine:" + COOPER, post_id: null, action: "undo", label: "Undo" }, [{ card_id: "routine:" + COOPER, post_id: null, action: "done", label: "Done" }, { card_id: "routine:" + COOPER, post_id: null, action: "skip", label: "Skip" }]]);
+  const losartan = wake.steps[6];
+  eq("H a medicine's tap is the meds card's per-medicine tap (med:<window>, the medicine named, Taken)", [losartan.id, losartan.tap, losartan.undo], ["med:with_breakfast:losartan", { card_id: "med:with_breakfast", post_id: "losartan", action: "done", label: "Taken" }, { card_id: "med:with_breakfast", post_id: "losartan", action: "undo", label: "Undo" }]);
+  eq("H the stretch: the 8 moves as its how-to, numbered inside the step", [cooper.howto.length, cooper.howto[0], cooper.howto[7]], [8, "Standing hip flexor lunge, 45 seconds a side, 2 rounds.", "Standing thoracic extension, 10 to 12 reps."]);
+  eq("H each move with its cues, time and why, as written (the dash rule: ' - ')", [cooper.howto_detail.length, cooper.howto_detail[0].cues.length, cooper.howto_detail[0].time, /^Tight hip flexors/.test(cooper.howto_detail[0].why), cooper.howto_detail[3].why.includes(" - the muscle"), JSON.stringify(cooper.howto_detail).includes(" -- ")], [8, 4, "90 sec total", true, true, false]);
+  eq("H a routine with steps shows no How (the full rung is folded into the steps)", [cooper.how, breakfast.how, breakfast.howto], [null, null, ["Get the eggs out.", "Five eggs over easy, two protein toast, sauteed greens, kimchi."]]);
+  eq("H plain lines carry no detail", breakfast.howto_detail, []);
+  eq("H a routine with no steps is one step, its full rung as How, its why kept", [coffee.howto, coffee.how, coffee.why], [[], "Coffee, once the levo hour has closed.", "Levothyroxine needs its hour alone before anything else."]);
+  eq("H a full rung that only repeats the title is not shown", [shower.how, shower.howto.length], [null, 4]);
+  eq("H no rung reaches a step: no rungs, no reduced, no floor", d.day_groups.flatMap((g) => g.steps).some((s) => "rungs" in s || JSON.stringify(s).includes("Splash your face") || JSON.stringify(s).includes("Fill the kettle")), false);
+  const back = eve.steps[1];
+  eq("H the first motion rides on the step", [back.first_motion, back.howto[0]], ["Hand her the tube.", "Hand Maddy the tube."]);
+  const traz = eve.steps[4];
+  eq("H trazodone: an optional step, tagged, never counted, never in Done for the group", [traz.optional, traz.tag, traz.status, eve.count, eve.done_all.some((t) => t.card_id === "routine:trazodone")], [true, "optional", "open", { total: 5, done: 0, open: 5, held: 0, skipped: 0, optional: 1 }, false]);
+  eq("H the bedtime medicine sits in the evening, at its clock", [eve.steps[5].block, eve.steps[5].time, eve.steps[5].card_id], ["Evening", "9:30pm", "med:bedtime"]);
+  eq("H the morning's count: done, open, skipped", [wake.count, wake.all_done, wake.first_open], [{ total: 9, done: 2, open: 6, held: 0, skipped: 1, optional: 0 }, false, "routine:" + COOPER]);
+  eq("H Done for the group: the open steps' own taps, in order", wake.done_all, [
+    { card_id: "routine:" + COOPER, post_id: null, action: "done" }, { card_id: "routine:trt-thu", post_id: null, action: "done" }, { card_id: "routine:" + BREAKFAST, post_id: null, action: "done" },
+    { card_id: "med:with_breakfast", post_id: "losartan", action: "done" }, { card_id: "med:with_breakfast", post_id: "omega", action: "done" }, { card_id: "med:weekly", post_id: "trt-med", action: "done" }]);
+  eq("H day counts over the parts of the day (optional out)", d.day_counts, { groups: 4, total: 19, done: 2, open: 15, held: 1, skipped: 1 });
+  eq("H the steps column answered", d.steps_ready, true);
+  const wod = d.groups[0];
+  eq("H Replies and the DM check ride at the end of The Way of Dad, numbered on (question 7)", [wod.key, wod.kind, wod.steps.map((s) => s.n + ":" + (s.kind || "post")), whats(wod).slice(4)], ["wayofdad", "posting", ["1:post", "2:post", "3:post", "4:post", "5:routine", "6:routine"], ["Replies. Fifteen minutes.", "The DM check. Answer every DM within the day."]]);
+  eq("H The Way of Dad reads 3 of 6, its Done for the group carries the two routines", [wod.count, wod.done_all.map((t) => t.card_id)], [{ total: 6, done: 3, open: 3, held: 0, skipped: 0, optional: 0 }, ["content:w-reel", "routine:" + REPLIES, "routine:" + DMS]]);
+  const rep = wod.steps[4];
+  eq("H Replies carries its ask, its copy blocks and its links, and its three steps", [rep.ask, rep.copies, rep.links, rep.howto], ["how many replies", [{ label: "The five X rooms", text: "@drjoekort\n@MattBaume" }], [{ href: "https://x.com/notifications", label: "X notifications" }], ["Answer everyone who replied to you.", "One useful sentence in each of the five X rooms.", "Three on Bluesky, inside the pinned feeds."]]);
+  eq("H a door routine is not repeated in its part of the day", d.day_groups.some((g) => g.steps.some((s) => s.card_id === "routine:" + REPLIES)), false);
+  eq("H a door of the house stays in its part of the day", wake.steps.some((s) => s.card_id === "routine:trt-thu"), true);
+  eq("H the posting counts include the line's routines", d.counts, { groups: 1, total: 6, done: 3, open: 3, held: 0, skipped: 0 });
+}
+{
+  const { d } = await dayGroups({ pillar: "wayofdad" });
+  eq("H a pillar narrows to its line: no parts of the day", [d.groups.map((g) => g.key), d.day_groups, d.day_counts.total], [["wayofdad"], [], 0]);
+}
+{
+  // before routine_steps_01: no steps column, every routine is one step with its full rung as How
+  const t = dayTables(); t.checklist_templates = t.checklist_templates.map(({ steps, ...x }) => x);
+  const { d } = await dayGroups({}, t);
+  const cooper = d.day_groups[0].steps[2];
+  eq("H no steps column: steps_ready false, the stretch one step with its full rung", [d.steps_ready, cooper.howto, cooper.how], [false, [], "Cooper out, then the eight moves."]);
+}
+{
+  // a line routine on a day with no posts for its line: the line's group of routines alone, in account order
+  const t = dayTables(); t.content_calendar = [];
+  const { d } = await dayGroups({}, t);
+  eq("H no Way of Dad posts: its group holds the two routines alone", [d.groups.map((g) => g.key), whats(d.groups[0]), d.groups[0].block], [["wayofdad"], ["Replies. Fifteen minutes.", "The DM check. Answer every DM within the day."], "Wake"]);
+}
+{
+  // Friday: the clay mask joins the evening with its three steps
+  const t = dayTables(); t.content_calendar = [];
+  const { d } = await dayGroups({ date: "2026-10-09" }, t);
+  const clay = d.day_groups.find((g) => g.key === "day:evening").steps.find((s) => s.what === "Clay mask");
+  eq("H Friday: the clay mask is in the evening, its three steps", clay && clay.howto, ["Open the jar.", "Clay mask on the nose and pores, ten to fifteen minutes.", "Rinse, then the night routine."]);
+  eq("H Friday: no weekly medicine (Thursday only)", d.day_groups[0].steps.some((s) => s.timing === "weekly"), false);
+}
+{
+  // the morning op is untouched: a routine card still carries its rungs for the Chart House
+  const { handler } = await fresh();
+  globalThis.__sb = mockDb(dayTables()); linearCalls = [];
+  const r = await call(handler, { op: "morning", date: D3, now_min: 480 });
+  const c = r.json.sitting.find((x) => x.id === "routine:" + COOPER);
+  eq("H morning op: the routine card keeps its rungs, no steps field", [r.status, c.rungs, "howto" in c, "steps" in c], [200, { full: "Cooper out, then the eight moves.", reduced: "Cooper out, then three moves.", floor: "Put the leash on Cooper." }, false, false]);
+  eq("H morning op: trazodone (as needed) is still not a card", r.json.sitting.some((x) => x.id === "routine:trazodone"), false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

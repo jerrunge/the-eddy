@@ -35,6 +35,14 @@
 //           against the folder of metadata.vault_path. An image or a PDF in the vault carries a url on the file door.
 //   GET ?op=photo&path=<vault path> now serves a PDF as well as an image (png, jpg, jpeg, gif, webp, pdf under docs/).
 //   The morning card's photo.url stays images only.
+//   Day two (added under v15, nothing above changed): the groups answer gains day_groups, day_counts, day_rule and
+//   steps_ready. day_groups are the parts of the day (The morning routine, The midday routine, The evening routine, The
+//   close), each step a routine row (routine:<id>, Done and Skip as the routine card) or a medicine (med:<window> with
+//   the medicine named, Taken), its own steps as howto (checklist_templates.steps, migration routine_steps_01) with
+//   howto_detail for a move's cues, time and why; a row with no steps is one step with its full rung as how. On waking
+//   leads the morning, with breakfast follows Breakfast, bedtime ends the evening; an as-needed medicine is an optional
+//   step never counted. A routine whose door is a line of business rides at the end of that line's posting group.
+//   Every group gains kind (posting | routine) and block. The morning op still serves the rungs to the Chart House.
 //
 // (v13, standing whole under v15) THE MATRIX ON THE ENGINE (RULINGS 2026-09-16, the estate by tap). Every card the engine
 // serves carries one pillar and one track, and two views regroup the same cards: a day's posting reads as one
@@ -1044,14 +1052,7 @@ async function compose(sb: any, body: any, viaService: boolean, today: string, n
 
       // ---- the routines of today: the one table (plus the legacy Morning rows until the migration lands)
       const templates = (tplQ.data ?? []).filter((t: any) => !t.paused);
-      const runsOn = (t: any, day: string, wdi: number) => {
-        if (t.starts_on && t.starts_on > day) return false;
-        if (t.ends_on && t.ends_on < day) return false;
-        if (Array.isArray(t.days) && t.days.length) return t.days.map(Number).includes(wdi);
-        if (t.cadence === "as_needed") return false;
-        if (t.cadence === "weekly") return wdi === 4;   // no days named: Thursday, the week's anchor day
-        return true;
-      };
+      const runsOn = templateRunsOn;
       const todaysTemplates = templates.filter((t: any) => runsOn(t, today, wd));
       const legacyRoutines = legacyRoutinesQ.error ? [] : (legacyRoutinesQ.data ?? []);
       const legacyMarks = new Map<string, any>(); for (const m of (legacyMarksQ.error ? [] : (legacyMarksQ.data ?? []))) legacyMarks.set(m.routine_id, m);
@@ -1303,8 +1304,169 @@ function stepWhat(row: any): string {
   if (m) { const k = m[2].toLowerCase(); return m[1] + ", on " + (k === "instagram feed" ? "the Instagram feed" : k === "instagram story" ? "the Instagram Story" : (PLATFORM_LABEL[k] || m[2])); }
   return t || pieceTitle(row);
 }
+// Whether a routine row runs on a day (the morning op's rule, one rule for both compositions).
+function templateRunsOn(t: any, day: string, wdi: number): boolean {
+  if (t.starts_on && t.starts_on > day) return false;
+  if (t.ends_on && t.ends_on < day) return false;
+  if (Array.isArray(t.days) && t.days.length) return t.days.map(Number).includes(wdi);
+  if (t.cadence === "as_needed") return false;
+  if (t.cadence === "weekly") return wdi === 4;   // no days named: Thursday, the week's anchor day
+  return true;
+}
+
+// ----- v15, day two (RULINGS 2026-10-06, yes as drawn; the drawing's day two): the routines and the medicines join the
+// groups. A routine is a numbered step in its part of the day (the drawing's question 3: Coffee is step 4 of the morning),
+// and the routine's own steps are the step's how-to, numbered inside it (the stretch's 8 moves, each with its cues, time
+// and why). The medicines are steps where he takes them (question 6): on waking first in the morning, with breakfast
+// right after Breakfast, bedtime at the end of the evening; an as-needed medicine (trazodone) is an optional step that
+// never counts as open. A routine with a door on a line of business rides at the end of that line's group (question 7:
+// Replies and the DM check are the last two steps of The Way of Dad). Every Done is the tap the routine or the medicine
+// card takes today (routine:<id> done; med:<window> done with the medicine named), so a mark means what it meant.
+// The steps come from checklist_templates.steps (a list, written by migration routine_steps_01 and his edits); a row with
+// none is one step, its full rung shown as How because it is the whole instruction (the reduced and floor rungs are
+// smaller copies and leave the screen; the columns stay in the hub). Reads only.
+const DAY_BLOCKS = ["Wake", "Midday", "Evening", "Close", "Any time"];
+const DAY_GROUP_NAME: Record<string, string> = { Wake: "The morning routine", Midday: "The midday routine", Evening: "The evening routine", Close: "The close", "Any time": "Any time" };
+const LINE_DOOR: Record<string, string> = { wayofdad: "wayofdad", walks: "wayofdad", fortify: "fortify", maddy: "maddy" };
+// a routine's own steps from the steps column: a string, or { what, sub, why, cues, time } (a move as resources.ts writes it)
+function routineHowto(t: any): { what: string; sub: string | null; why: string | null; cues: string[]; time: string | null }[] {
+  const v = t?.steps;
+  if (!Array.isArray(v)) return [];
+  const out: any[] = [];
+  for (const x of v) {
+    if (typeof x === "string") { if (x.trim()) out.push({ what: x.trim(), sub: null, why: null, cues: [], time: null }); continue; }
+    if (!x || typeof x !== "object") continue;
+    const what = String(x.what ?? x.title ?? x.text ?? "").trim();
+    if (!what) continue;
+    const cues = Array.isArray(x.cues) ? x.cues : Array.isArray(x.steps) ? x.steps : [];
+    out.push({ what, sub: x.sub ? String(x.sub) : null, why: x.why ? String(x.why) : null, cues: cues.map((c: any) => String(c)).filter(Boolean), time: x.time ? String(x.time) : null });
+  }
+  return out;
+}
+const squash = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+// One routine row as a step, its status, clock and block exactly as the morning op's card reads them.
+function routineStep(t: any, comp: any, today: string, optional = false): any {
+  const card = checklistCard(t, comp, today);
+  const howto = routineHowto(t);
+  const detail = howto.some((h) => h.sub || h.why || h.time || h.cues.length);
+  const full = t.rung_full ? String(t.rung_full).trim() : "";
+  const how = !howto.length && full && squash(full) !== squash(t.title) ? full : null;
+  const status = card.status;
+  const cardId = card.id;
+  const tap = { card_id: cardId, post_id: null, action: "done", label: "Done" };
+  const undo = { card_id: cardId, post_id: null, action: "undo", label: "Undo" };
+  const copies = (Array.isArray(card.copy) ? card.copy : []).map((c: any) => (typeof c === "string" ? { label: "Copy", text: c } : { label: String(c?.label || "Copy"), text: String(c?.text || "") })).filter((c: any) => c.text);
+  return {
+    id: cardId, kind: "routine", n: 0, row_id: t.id, card_id: cardId, post_id: null,
+    what: String(t.title || ""), piece: null, piece_key: null, platform: null, platform_label: null, format: null, story: false, account: null,
+    time: card.time && card.time !== "later" ? card.time : null, due_min: card.due_min, until_min: card.until_min, block: card.block,
+    status, done_at: status === "done" ? (comp?.completed_at || null) : null, held_until: card.held_until || null,
+    text: null, files: [], photo: null, frame: null, photos_album: null, alt: null,
+    how, why: t.why ? String(t.why) : null, first_motion: t.first_physical_motion ? String(t.first_physical_motion) : null,
+    howto: howto.map((h) => h.what), howto_detail: detail ? howto : [],
+    copies, ask: t.ask ? String(t.ask) : null, value: comp ? comp.value ?? null : null,
+    tap, undo, taps: status === "open" ? [tap, { card_id: cardId, post_id: null, action: "skip", label: "Skip" }] : [undo],
+    links: card.links, anchor: card.anchor, anchor_name: card.anchor_name, cadence: card.cadence,
+    optional, tag: optional ? "optional" : null,
+    pillar: card.pillar, track: card.track, placed_by: card.placed_by, campaign: null, step_order: null, ordered_by: "clock", day: today,
+  };
+}
+// One medicine of a window as a step: Taken writes the med_log row the meds card's per-medicine tap writes.
+function medStep(m: any, timing: string, taken: Map<string, any>, today: string): any {
+  const l = taken.get(m.id) || taken.get("name:" + m.name);
+  const time = MED_TIME[timing] || null;
+  const due = minOf(time);
+  const cardId = "med:" + timing;
+  const tap = { card_id: cardId, post_id: m.id, action: "done", label: "Taken" };
+  const undo = { card_id: cardId, post_id: m.id, action: "undo", label: "Undo" };
+  const status = l ? "done" : "open";
+  return {
+    id: "med:" + timing + ":" + m.id, kind: "medicine", n: 0, row_id: m.id, card_id: cardId, post_id: m.id,
+    what: m.name + (m.dose ? " " + m.dose : "") + ", " + (MED_LABEL[timing] || timing).toLowerCase(), piece: null, piece_key: null,
+    platform: null, platform_label: null, format: null, story: false, account: null,
+    time, due_min: due, until_min: untilOf(due), block: timing === "bedtime" ? "Evening" : blockOf(time),
+    status, done_at: l ? l.taken_at || null : null, held_until: null,
+    text: null, files: [], photo: null, frame: null, photos_album: null, alt: null, how: null, why: null, first_motion: null,
+    howto: [], howto_detail: [], copies: [], ask: null, value: null,
+    tap, undo, taps: status === "open" ? [tap] : [undo], links: [], anchor: null, anchor_name: null, cadence: null,
+    optional: false, tag: "medicine", timing, ...medsPlace(), campaign: null, step_order: null, ordered_by: "clock", day: today,
+  };
+}
+// A group over steps already in order: numbers 1 to N, the count (an optional step never counts), Done for the group.
+function stepGroup(key: string, kind: string, name: string, order: number, steps: any[], extra: Record<string, unknown> = {}): any {
+  steps.forEach((s, i) => { s.n = i + 1; });
+  const counted = steps.filter((s) => !s.optional);
+  const count = { total: counted.length, done: counted.filter((s) => s.status === "done").length, open: counted.filter((s) => s.status === "open").length, held: counted.filter((s) => s.status === "held").length, skipped: counted.filter((s) => s.status === "skipped").length, optional: steps.length - counted.length };
+  const firstOpen = counted.find((s) => s.status === "open") || null;
+  const clocks = steps.map((s) => s.time).filter(Boolean);
+  const first = steps.find((s) => s.block && s.block !== "Any time");
+  return Object.assign({
+    key, kind, name, order, block: first ? first.block : "Any time",
+    accounts: [...new Set(steps.map((s) => s.account).filter(Boolean))], albums: [...new Set(steps.map((s) => s.photos_album).filter(Boolean))],
+    count, all_done: count.total > 0 && count.done === count.total, first_open: firstOpen ? firstOpen.id : null,
+    steps, done_all: counted.filter((s) => s.status === "open").map((s) => ({ card_id: s.card_id, post_id: s.post_id, action: s.tap.action })),
+    first_time: clocks[0] || null, last_time: clocks[clocks.length - 1] || null,
+  }, extra);
+}
+// The routines and the medicines of the day: the part-of-day groups, and the line routines for the posting groups.
+async function composeDay(sb: any, today: string) {
+  const wd = dow(today);
+  const [tplQ, compQ, medsQ, logQ] = await Promise.all([
+    sb.from("checklist_templates").select("*").eq("user_id", USER).order("sort_order"),
+    sb.from("checklist_completions").select("*").eq("date", today),
+    sb.from("medications").select("id, name, dose, timing, active").eq("active", true).order("name"),
+    sb.from("med_log").select("medication_id, med_name, taken_at").eq("date", today),
+  ]);
+  const templates = (tplQ.data ?? []).filter((t: any) => !t.paused);
+  const stepsReady = templates.some((t: any) => "steps" in t);
+  const comps = new Map<string, any>(); for (const c of (compQ.data ?? [])) comps.set(c.template_id, c);
+  const taken = new Map<string, any>(); for (const l of (logQ.data ?? [])) { if (l.medication_id) taken.set(l.medication_id, l); taken.set("name:" + l.med_name, l); }
+  const line = new Map<string, any[]>();
+  const byBlock = new Map<string, { s: any; k: number[] }[]>();
+  const put = (s: any, k: number[]) => { const b = DAY_BLOCKS.includes(s.block) ? s.block : "Any time"; if (!byBlock.has(b)) byBlock.set(b, []); byBlock.get(b)!.push({ s, k }); };
+  // the sort key inside a part of the day: [rank, minute, tie]; rank -1 leads (on waking), 1 trails (bedtime)
+  const minute = (s: any) => s.due_min ?? (s.time ? minOf(s.time) : null) ?? 2000;
+  let breakfast: any = null;
+  for (const t of templates) {
+    const today_ = templateRunsOn(t, today, wd);
+    const optional = !today_ && t.cadence === "as_needed" && t.kind === "meds" && (!t.starts_on || t.starts_on <= today) && (!t.ends_on || t.ends_on >= today);
+    if (!today_ && !optional) continue;
+    const s = routineStep(t, comps.get(t.id), today, optional);
+    const lineKey = t.door ? LINE_DOOR[String(t.door)] : null;
+    if (lineKey) { if (!line.has(lineKey)) line.set(lineKey, []); line.get(lineKey)!.push(s); continue; }
+    const k = [0, minute(s), Number(t.sort_order ?? 0)];
+    if (t.key === "breakfast" || /^breakfast$/i.test(String(t.title || "").trim())) breakfast = { s, k };
+    put(s, k);
+  }
+  const meds = (medsQ.data ?? []) as any[];
+  for (const m of meds) {
+    const timing = m.timing || "on_waking";
+    if (timing === "weekly" && wd !== 4) continue;
+    const s = medStep(m, timing, taken, today);
+    // on waking leads the morning; with breakfast sits right after Breakfast when it runs today; bedtime ends the evening
+    let k = [0, minute(s), 5000];
+    if (timing === "on_waking") k = [-1, minute(s), 0];
+    else if (timing === "with_breakfast" && breakfast && breakfast.s.block === s.block) k = [breakfast.k[0], breakfast.k[1], breakfast.k[2] + 0.5];
+    else if (timing === "with_breakfast" && breakfast) { s.block = breakfast.s.block; k = [breakfast.k[0], breakfast.k[1], breakfast.k[2] + 0.5]; }
+    else if (timing === "bedtime") k = [1, minute(s), 0];
+    put(s, k);
+  }
+  const groups: any[] = [];
+  DAY_BLOCKS.forEach((b, i) => {
+    const list = byBlock.get(b);
+    if (!list || !list.length) return;
+    list.sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1] || x.k[2] - y.k[2] || String(x.s.what).localeCompare(String(y.s.what)));
+    const steps = list.map((x) => x.s);
+    const g = stepGroup("day:" + b.toLowerCase().replace(/\s+/g, "-"), "routine", DAY_GROUP_NAME[b], i + 1, steps, { label: "Done" });
+    g.block = b;
+    g.kicker = g.first_time && g.last_time && g.first_time !== g.last_time ? g.first_time + " to " + g.last_time : g.first_time ? "From " + g.first_time : b;
+    groups.push(g);
+  });
+  return { groups, line, steps_ready: stepsReady };
+}
+
 async function composeGroups(sb: any, body: any, viaService: boolean, today: string, now: string) {
-  const CC = "id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at";
+  const CC ="id, title, platform, format, status, scheduled_for, published_at, url, campaign, pillar, parent_post_id, is_canonical, metadata, excerpt, updated_at";
   const dayQ = await selectWithFallback((cols: string) => sb.from("content_calendar").select(cols).eq("user_id", USER).neq("status", "archived").gte("scheduled_for", today).lte("scheduled_for", today + "T23:59:59").order("scheduled_for"), CC + ", track", CC);
   if (dayQ.error) throw new Error(dayQ.error.message);
   const rows: any[] = dayQ.data ?? [];
@@ -1318,10 +1480,13 @@ async function composeGroups(sb: any, body: any, viaService: boolean, today: str
   for (const r of rows) { const p = contentPlace(r).pillar; if (!byPillar.has(p)) byPillar.set(p, []); byPillar.get(p)!.push(r); }
   let fetches = 0;
   const groups: any[] = [];
+  // day two: the routines and the medicines (a door routine rides at the end of its line's group)
+  const day = await composeDay(sb, today);
   for (const key of GROUP_ORDER) {
     if (only && key !== only) continue;
-    const list = byPillar.get(key);
-    if (!list || !list.length) continue;
+    const list = byPillar.get(key) || [];
+    const lineSteps = day.line.get(key) || [];
+    if (!list.length && !lineSteps.length) continue;
     const keyed = list.map((r: any) => { const m = r.metadata || {}; const clock = slotClock(m); return { r, m, so: stepOrderOf(m), clock, due: clock ? minOf(clock) : null, rank: platformRank(key, r) }; });
     keyed.sort((a, b) => (a.so == null ? 1 : 0) - (b.so == null ? 1 : 0) || (a.so ?? 0) - (b.so ?? 0) || (a.due ?? 9999) - (b.due ?? 9999) || a.rank - b.rank || String(a.r.title || "").localeCompare(String(b.r.title || "")));
     const steps: any[] = [];
@@ -1368,15 +1533,24 @@ async function composeGroups(sb: any, body: any, viaService: boolean, today: str
         links, ...contentPlace(r), campaign: r.campaign || null, step_order: so, ordered_by: so != null ? "step_order" : due != null ? "clock" : "platform", day: today,
       });
     }
-    const uniq = (xs: any[]) => [...new Set(xs.filter(Boolean))];
-    const count = { total: steps.length, done: steps.filter((s) => s.status === "done").length, open: steps.filter((s) => s.status === "open").length, held: steps.filter((s) => s.status === "held").length, skipped: steps.filter((s) => s.status === "skipped").length };
-    const firstOpen = steps.find((s) => s.status === "open") || null;
-    groups.push({
-      key, name: PILLARS[key], order: GROUP_ORDER.indexOf(key) + 1,
-      accounts: uniq(steps.map((s) => s.account)), albums: uniq(steps.map((s) => s.photos_album)),
-      count, all_done: count.total > 0 && count.done === count.total, first_open: firstOpen ? firstOpen.id : null,
-      steps, done_all: steps.filter((s) => s.status === "open").map((s) => ({ card_id: s.card_id, post_id: s.post_id, action: s.tap.action })),
-    });
+    if (!lineSteps.length) {
+      const uniq = (xs: any[]) => [...new Set(xs.filter(Boolean))];
+      const count = { total: steps.length, done: steps.filter((s) => s.status === "done").length, open: steps.filter((s) => s.status === "open").length, held: steps.filter((s) => s.status === "held").length, skipped: steps.filter((s) => s.status === "skipped").length };
+      const firstOpen = steps.find((s) => s.status === "open") || null;
+      groups.push({
+        key, name: PILLARS[key], order: GROUP_ORDER.indexOf(key) + 1,
+        accounts: uniq(steps.map((s) => s.account)), albums: uniq(steps.map((s) => s.photos_album)),
+        count, all_done: count.total > 0 && count.done === count.total, first_open: firstOpen ? firstOpen.id : null,
+        steps, done_all: steps.filter((s) => s.status === "open").map((s) => ({ card_id: s.card_id, post_id: s.post_id, action: s.tap.action })),
+        kind: "posting", block: (steps.find((s) => s.block && s.block !== "Any time") || {}).block || "Any time",
+      });
+      continue;
+    }
+    // the line's routines follow its posts, in the day's clock order (Replies, then the DM check)
+    lineSteps.sort((a, b) => (a.due_min ?? 2000) - (b.due_min ?? 2000));
+    const g = stepGroup(key, "posting", PILLARS[key], GROUP_ORDER.indexOf(key) + 1, steps.concat(lineSteps));
+    delete g.first_time; delete g.last_time;
+    groups.push(g);
   }
   const all = groups.flatMap((g) => g.steps);
   let nowMin: number; let clock: "pacific" | "test" = "pacific";
@@ -1387,7 +1561,11 @@ async function composeGroups(sb: any, body: any, viaService: boolean, today: str
   const byClock = pickNext(all, nowMin);
   const counts = { groups: groups.length, total: all.length, done: all.filter((s) => s.status === "done").length, open: all.filter((s) => s.status === "open").length, held: all.filter((s) => s.status === "held").length, skipped: all.filter((s) => s.status === "skipped").length };
   const behind = { count: behindRows.length, rows: behindRows.map((r: any) => ({ id: "post:" + r.id, row_id: r.id, what: stepWhat(r), day: String(r.scheduled_for || "").slice(0, 10), pillar: contentPlace(r).pillar, platform: isStory(r) ? "instagram story" : r.platform })) };
-  return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, engine: "one-today v15", order_rule: "account-order; step_order, then the clock, then the platform", next_step_id: firstOpen ? firstOpen.id : null, next_by_clock_id: byClock ? byClock.id : null, groups, counts, behind, text_ready: !!(await ghToken()), served_at: now };
+  // day two: the part-of-day groups (only on the whole day; a pillar narrows to its line)
+  const dayGroups = only ? [] : day.groups;
+  const dayAll = dayGroups.flatMap((g: any) => g.steps).filter((s: any) => !s.optional);
+  const dayCounts = { groups: dayGroups.length, total: dayAll.length, done: dayAll.filter((s: any) => s.status === "done").length, open: dayAll.filter((s: any) => s.status === "open").length, held: dayAll.filter((s: any) => s.status === "held").length, skipped: dayAll.filter((s: any) => s.status === "skipped").length };
+  return { date: today, nice_date: niceDate(today), now: ptNow(), now_min: nowMin, clock, engine: "one-today v15", order_rule: "account-order; step_order, then the clock, then the platform", next_step_id: firstOpen ? firstOpen.id : null, next_by_clock_id: byClock ? byClock.id : null, groups, counts, behind, day_groups: dayGroups, day_counts: dayCounts, day_rule: "parts of the day; on waking first, with breakfast after Breakfast, bedtime last; the clock, then the row's sort", steps_ready: day.steps_ready, text_ready: !!(await ghToken()), served_at: now };
 }
 
 Deno.serve(async (req: Request) => {
